@@ -53,7 +53,34 @@ class WriteBatch {
 
  private:
   friend class WriteBatchInternal;
-
+  /**
+   * 成员rep_ 内存表现形式
+   *
+   *   0                   1                   2                   3           
+   *   0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 
+   *   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   *   |                                                               |
+   *   |                        Sequnce number                         |
+   *   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   *   |                        count                                  |
+   *   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   *   |                                                               |
+   *   ~                    key-value (不定长)                         ~
+   *   |                                                               |
+   *   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   *   |                                                               |
+   *   ~                    key-value (不定长)                         ~
+   *   |                                                               |
+   *   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   * 说明:
+   *   Sequnce number 序列号8字节
+   *   count          key-value对 有多少个
+   *   key-value格式说明:
+   *    1）type + key-size + key + value-size + value
+   *    2）type(1字节)取值: kTypeValue和kTypeDeletion
+   *    3）key-size、value-size 进行数字压缩存储(7bit有效数据)
+   *       key-size、key、value-size 、value是不定长
+   */
   std::string rep_;  // See comment in write_batch.cc for the format of rep_
 
   // Intentionally copyable
