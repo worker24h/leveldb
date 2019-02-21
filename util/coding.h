@@ -55,6 +55,9 @@ extern char* EncodeVarint64(char* dst, uint64_t value);
 // Lower-level versions of Get... that read directly from a character buffer
 // without any bounds checking.
 
+/**
+ * 解码 数据存储按照小端序存储
+ */
 inline uint32_t DecodeFixed32(const char* ptr) {
   if (port::kLittleEndian) {
     // Load the raw bytes

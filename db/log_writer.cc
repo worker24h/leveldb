@@ -50,27 +50,27 @@ Status Writer::AddRecord(const Slice& slice) {
       if (leftover > 0) {
         // Fill the trailer (literal below relies on kHeaderSize being 7)
         assert(kHeaderSize == 7);
-        dest_->Append(Slice("\x00\x00\x00\x00\x00\x00", leftover));
+        dest_->Append(Slice("\x00\x00\x00\x00\x00\x00", leftover));// PosixWritableFile类对象
       }
       block_offset_ = 0;
     }
 
     // Invariant: we never leave < kHeaderSize bytes in a block.
     assert(kBlockSize - block_offset_ - kHeaderSize >= 0);
-
+    //可用空间
     const size_t avail = kBlockSize - block_offset_ - kHeaderSize;
     const size_t fragment_length = (left < avail) ? left : avail;
 
     RecordType type;
     const bool end = (left == fragment_length);
-    if (begin && end) {
+    if (begin && end) {// 空间很充足 一次就够
       type = kFullType;
-    } else if (begin) {
+    } else if (begin) {//需要多次操作 这是一次
       type = kFirstType;
-    } else if (end) {
+    } else if (end) {//需要多次操作 这是最后一次
       type = kLastType;
     } else {
-      type = kMiddleType;
+      type = kMiddleType;//需要多次操作  这是中间操作
     }
 
     s = EmitPhysicalRecord(type, ptr, fragment_length);
@@ -81,6 +81,12 @@ Status Writer::AddRecord(const Slice& slice) {
   return s;
 }
 
+/**
+ * 将数据写入文件中
+ * @param t 记录类型
+ * @param ptr 数据起始地址
+ * @param n   数据长度
+ */
 Status Writer::EmitPhysicalRecord(RecordType t, const char* ptr, size_t n) {
   assert(n <= 0xffff);  // Must fit in two bytes
   assert(block_offset_ + kHeaderSize + n <= kBlockSize);

@@ -633,6 +633,7 @@ class VersionSet::Builder {
       : vset_(vset),
         base_(base) {
     base_->Ref();
+    //重定义set集合 并且指定自定义比较器
     BySmallestKey cmp;
     cmp.internal_comparator = &vset_->icmp_;
     for (int level = 0; level < config::kNumLevels; level++) {
@@ -662,8 +663,14 @@ class VersionSet::Builder {
   }
 
   // Apply all of the edits in *edit to the current state.
+  /**
+   * 针对压缩点、删除文件、新增文件的处理
+   */
   void Apply(VersionEdit* edit) {
+  
     // Update compaction pointers
+    // VersionSet中compact_pointer_是一个数组，下标是level层号([0,6]), value是
+    // InternalKey对象的名称  换句话说每一层可以有不同关键字比较方法
     for (size_t i = 0; i < edit->compact_pointers_.size(); i++) {
       const int level = edit->compact_pointers_[i].first;
       vset_->compact_pointer_[level] =
@@ -671,6 +678,7 @@ class VersionSet::Builder {
     }
 
     // Delete files
+    // deleted_files_中second成员代表文件编号， 该字段数据来自FileMetaData中number
     const VersionEdit::DeletedFileSet& del = edit->deleted_files_;
     for (VersionEdit::DeletedFileSet::const_iterator iter = del.begin();
          iter != del.end();
@@ -699,7 +707,19 @@ class VersionSet::Builder {
       // same as the compaction of 40KB of data.  We are a little
       // conservative and allow approximately one seek for every 16KB
       // of data before triggering a compaction.
-      f->allowed_seeks = (f->file_size / 16384);
+      /**
+       * 值allowed_seeks事关compaction的优化，其计算依据如下，首先假设： 
+       * 1 一次seek时间为10ms 
+       * 2 写入10MB数据的时间为10ms（100MB/s） 
+       * 3 compact 1MB的数据需要执行25MB的IO 
+       *   ->从本层读取1MB 
+       *   ->从下一层读取10-12MB（文件的key range边界可能是非对齐的） 
+       *   ->向下一层写入10-12MB 
+       * 这意味这25次seek的代价等同于compact 1MB的数据，也就是一次seek花费的时间
+       * 大约相当于compact 40KB的数据。基于保守的角度考虑，对于每16KB的数据，
+       * 我们允许它在触发compaction之前能做一次seek。
+       */
+      f->allowed_seeks = (f->file_size / 16384); //16k
       if (f->allowed_seeks < 100) f->allowed_seeks = 100;
 
       levels_[level].deleted_files.erase(f->number);
@@ -718,19 +738,19 @@ class VersionSet::Builder {
       std::vector<FileMetaData*>::const_iterator base_iter = base_files.begin();
       std::vector<FileMetaData*>::const_iterator base_end = base_files.end();
       const FileSet* added = levels_[level].added_files;
-      v->files_[level].reserve(base_files.size() + added->size());
+      v->files_[level].reserve(base_files.size() + added->size());//增加vector空间
       for (FileSet::const_iterator added_iter = added->begin();
            added_iter != added->end();
            ++added_iter) {
-        // Add all smaller files listed in base_
-        for (std::vector<FileMetaData*>::const_iterator bpos
-                 = std::upper_bound(base_iter, base_end, *added_iter, cmp);
-             base_iter != bpos;
-             ++base_iter) {
-          MaybeAddFile(v, level, *base_iter);
-        }
+          // Add all smaller files listed in base_
+          for (std::vector<FileMetaData*>::const_iterator bpos
+                   = std::upper_bound(base_iter, base_end, *added_iter, cmp);
+               base_iter != bpos;
+               ++base_iter) {
+            MaybeAddFile(v, level, *base_iter);
+          }
 
-        MaybeAddFile(v, level, *added_iter);
+          MaybeAddFile(v, level, *added_iter);
       }
 
       // Add remaining base files
@@ -790,7 +810,7 @@ VersionSet::VersionSet(const std::string& dbname,
       descriptor_log_(NULL),
       dummy_versions_(this),
       current_(NULL) {
-  AppendVersion(new Version(this));
+  AppendVersion(new Version(this));//添加一个默认Version对象
 }
 
 VersionSet::~VersionSet() {
@@ -800,6 +820,9 @@ VersionSet::~VersionSet() {
   delete descriptor_file_;
 }
 
+/**
+ * 将Version对象添加到VersionSet中
+ */
 void VersionSet::AppendVersion(Version* v) {
   // Make "v" current
   assert(v->refs_ == 0);
@@ -810,13 +833,16 @@ void VersionSet::AppendVersion(Version* v) {
   current_ = v;
   v->Ref();
 
-  // Append to linked list
+  // Append to linked list 双向链表方式
   v->prev_ = dummy_versions_.prev_;
   v->next_ = &dummy_versions_;
   v->prev_->next_ = v;
   v->next_->prev_ = v;
 }
 
+/**
+ * 注意: 进入此函数就已经加锁了
+ */
 Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
   if (edit->has_log_number_) {
     assert(edit->log_number_ >= log_number_);
@@ -835,8 +861,8 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
   Version* v = new Version(this);
   {
     Builder builder(this, current_);
-    builder.Apply(edit);
-    builder.SaveTo(v);
+    builder.Apply(edit);//将VersionEdit保存到Builder中
+    builder.SaveTo(v);//将Builder中数据保存到Version中
   }
   Finalize(v);
 
@@ -853,7 +879,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
     s = env_->NewWritableFile(new_manifest_file, &descriptor_file_);
     if (s.ok()) {
       descriptor_log_ = new log::Writer(descriptor_file_);
-      s = WriteSnapshot(descriptor_log_);
+      s = WriteSnapshot(descriptor_log_);//写入快照snapshot
     }
   }
 
@@ -902,6 +928,11 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
   return s;
 }
 
+/**
+ * 恢复数据 从文件中读取出VersionEdit来初始化VersionSet
+ * @param save_manifest  输出参数 
+ * @return 返回操作状态
+ */
 Status VersionSet::Recover(bool *save_manifest) {
   struct LogReporter : public log::Reader::Reporter {
     Status* status;
@@ -910,7 +941,7 @@ Status VersionSet::Recover(bool *save_manifest) {
     }
   };
 
-  // Read "CURRENT" file, which contains a pointer to the current manifest file
+  // Read "CURRENT" file, which contains a pointer to the current manifest file  
   std::string current;
   Status s = ReadFileToString(env_, CurrentFileName(dbname_), &current);
   if (!s.ok()) {
@@ -921,6 +952,7 @@ Status VersionSet::Recover(bool *save_manifest) {
   }
   current.resize(current.size() - 1);
 
+  //读取MANIFEST文件
   std::string dscname = dbname_ + "/" + current;
   SequentialFile* file;
   s = env_->NewSequentialFile(dscname, &file);
@@ -936,17 +968,19 @@ Status VersionSet::Recover(bool *save_manifest) {
   uint64_t last_sequence = 0;
   uint64_t log_number = 0;
   uint64_t prev_log_number = 0;
-  Builder builder(this, current_);
+  Builder builder(this, current_); //version_set.cc
 
   {
     LogReporter reporter;
     reporter.status = &s;
+    //创建读取执行器
     log::Reader reader(file, &reporter, true/*checksum*/, 0/*initial_offset*/);
     Slice record;
-    std::string scratch;
-    while (reader.ReadRecord(&record, &scratch) && s.ok()) {
+    std::string scratch;//在ReadRecord内部使用
+    // 读取出来的是VersionEdit对象
+    while (reader.ReadRecord(&record, &scratch) && s.ok()) {//log_reader.cc
       VersionEdit edit;
-      s = edit.DecodeFrom(record);
+      s = edit.DecodeFrom(record);//解码
       if (s.ok()) {
         if (edit.has_comparator_ &&
             edit.comparator_ != icmp_.user_comparator()->Name()) {
@@ -956,7 +990,7 @@ Status VersionSet::Recover(bool *save_manifest) {
         }
       }
 
-      if (s.ok()) {
+      if (s.ok()) {//将VersionEdit应用到VersionSet中
         builder.Apply(&edit);
       }
 
@@ -1006,7 +1040,7 @@ Status VersionSet::Recover(bool *save_manifest) {
     builder.SaveTo(v);
     // Install recovered version
     Finalize(v);
-    AppendVersion(v);
+    AppendVersion(v);// 将version插入到VersionSet中
     manifest_file_number_ = next_file;
     next_file_number_ = next_file + 1;
     last_sequence_ = last_sequence;
@@ -1060,7 +1094,9 @@ void VersionSet::MarkFileNumberUsed(uint64_t number) {
     next_file_number_ = number + 1;
   }
 }
-
+/**
+ * 预计算下次压缩Level层次
+ */
 void VersionSet::Finalize(Version* v) {
   // Precomputed best level for next compaction
   int best_level = -1;
@@ -1069,6 +1105,8 @@ void VersionSet::Finalize(Version* v) {
   for (int level = 0; level < config::kNumLevels-1; level++) {
     double score;
     if (level == 0) {
+      // 对于level 0以文件个数计算，kL0_CompactionTrigger默认配置为4,
+      // 因为如果0层文件多了会影响合并效率
       // We treat level-0 specially by bounding the number of files
       // instead of number of bytes for two reasons:
       //
@@ -1084,6 +1122,9 @@ void VersionSet::Finalize(Version* v) {
           static_cast<double>(config::kL0_CompactionTrigger);
     } else {
       // Compute the ratio of current size to size limit.
+      //对于level>0，根据level内的文件总大小计算
+      //其中函数MaxBytesForLevel根据level返回其本层文件总大小的预定最大值。
+      //计算规则为：1048576.0* level^10。
       const uint64_t level_bytes = TotalFileSize(v->files_[level]);
       score =
           static_cast<double>(level_bytes) / MaxBytesForLevel(options_, level);
@@ -1094,7 +1135,7 @@ void VersionSet::Finalize(Version* v) {
       best_score = score;
     }
   }
-
+  /* 表示下次压缩层次以及计算出的分数  如果分数<1 则不是必须进行压缩  */
   v->compaction_level_ = best_level;
   v->compaction_score_ = best_score;
 }

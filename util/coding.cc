@@ -6,6 +6,9 @@
 
 namespace leveldb {
 
+/**
+ * 编码码 数据存储按照小端序存储
+ */
 void EncodeFixed32(char* buf, uint32_t value) {
   if (port::kLittleEndian) {
     memcpy(buf, &value, sizeof(value));
@@ -44,10 +47,17 @@ void PutFixed64(std::string* dst, uint64_t value) {
   dst->append(buf, sizeof(buf));
 }
 
+/**
+ * 数字压缩 谷歌很多存储方式都是采用这种方式 例如grpc protocolbuffer
+ * 按照一个字节一个字节存储 
+ * 低7bit用于保存数据 
+ * 最高bit(第8bit)表示标志位  0 -- 表示该数据已经结束(可以生成原始数据)
+ *                            1 -- 表示该数据没有结束
+ */
 char* EncodeVarint32(char* dst, uint32_t v) {
   // Operate on characters as unsigneds
   unsigned char* ptr = reinterpret_cast<unsigned char*>(dst);
-  static const int B = 128;
+  static const int B = 128; // 1000 0000(二进制)
   if (v < (1<<7)) {
     *(ptr++) = v;
   } else if (v < (1<<14)) {

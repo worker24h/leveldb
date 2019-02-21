@@ -146,7 +146,7 @@ class Version {
   // are initialized by Finalize().
   double compaction_score_;
   int compaction_level_;
-
+  // 私有 构造函数
   explicit Version(VersionSet* vset)
       : vset_(vset), next_(this), prev_(this), refs_(0),
         file_to_compact_(NULL),
@@ -308,6 +308,7 @@ class VersionSet {
   // Opened lazily
   WritableFile* descriptor_file_;
   log::Writer* descriptor_log_;
+  
   Version dummy_versions_;  // Head of circular doubly-linked list of versions.
   Version* current_;        // == dummy_versions_.prev_
 

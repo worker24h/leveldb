@@ -16,6 +16,10 @@ class WritableFile;
 
 namespace log {
 
+/**
+ * 文件写入执行器
+ * 构造函数中WritableFile是写入目标文件
+ */
 class Writer {
  public:
   // Create a writer that will append data to "*dest".

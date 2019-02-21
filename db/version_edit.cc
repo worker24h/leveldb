@@ -41,7 +41,7 @@ void VersionEdit::Clear() {
 void VersionEdit::EncodeTo(std::string* dst) const {
   if (has_comparator_) {
     PutVarint32(dst, kComparator);
-    PutLengthPrefixedSlice(dst, comparator_);
+    PutLengthPrefixedSlice(dst, comparator_);//comparator_ ==> leveldb.BytewiseComparator
   }
   if (has_log_number_) {
     PutVarint32(dst, kLogNumber);

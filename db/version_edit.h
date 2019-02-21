@@ -14,10 +14,16 @@ namespace leveldb {
 
 class VersionSet;
 
+// 每次从MemTable转成文件时候 就会创建该结构体
 struct FileMetaData {
   int refs;
-  int allowed_seeks;          // Seeks allowed until compaction
+  // 当seek此处达到allowed_seeks就会触发一次压缩
+  int allowed_seeks;          // Seeks allowed until compaction 
+  
+  // number取值是从DBImpl对象中versions_->NewFileNumber();
+  // 参考方法WriteLevel0Table
   uint64_t number;
+
   uint64_t file_size;         // File size in bytes
   InternalKey smallest;       // Smallest internal key served by table
   InternalKey largest;        // Largest internal key served by table
@@ -98,7 +104,7 @@ class VersionEdit {
   bool has_last_sequence_;
 
   std::vector< std::pair<int, InternalKey> > compact_pointers_;
-  DeletedFileSet deleted_files_;
+  DeletedFileSet deleted_files_; //DeletedFileSet重定义了
   std::vector< std::pair<int, FileMetaData> > new_files_;
 };
 

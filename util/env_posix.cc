@@ -89,6 +89,9 @@ class Limiter {
   void operator=(const Limiter&);
 };
 
+/**
+ * 实现类: 连续文件
+ */
 class PosixSequentialFile: public SequentialFile {
  private:
   std::string filename_;
@@ -287,7 +290,11 @@ class PosixWritableFile : public WritableFile {
     return s;
   }
 };
-
+/**
+ * 文件加锁或解锁
+ * @param fd   文件描述符
+ * @param lock true 加锁  false 解锁
+ */
 static int LockOrUnlock(int fd, bool lock) {
   errno = 0;
   struct flock f;
@@ -299,6 +306,9 @@ static int LockOrUnlock(int fd, bool lock) {
   return fcntl(fd, F_SETLK, &f);
 }
 
+/**
+ * 文件锁对象
+ */
 class PosixFileLock : public FileLock {
  public:
   int fd_;
@@ -371,7 +381,12 @@ class PosixEnv : public Env {
     }
     return s;
   }
-
+  /**
+   * 创建Writable文件
+   * @param fname 文件名字
+   * @param result WritableFile对象 输出参数
+   * @return 返回操作状态
+   */
   virtual Status NewWritableFile(const std::string& fname,
                                  WritableFile** result) {
     Status s;
@@ -397,7 +412,11 @@ class PosixEnv : public Env {
     }
     return s;
   }
-
+  /**
+   * 判断文件是否存在
+   * @param fname 文件全路径
+   * @return true 存在 false 不存在
+   */
   virtual bool FileExists(const std::string& fname) {
     return access(fname.c_str(), F_OK) == 0;
   }
@@ -460,7 +479,12 @@ class PosixEnv : public Env {
     }
     return result;
   }
-
+  /**
+   * 创建文件LOCK
+   * @param fname LOCK文件名称
+   * @param lock  文件锁对象  输出参数
+   * @return status 操作状态
+   */
   virtual Status LockFile(const std::string& fname, FileLock** lock) {
     *lock = NULL;
     Status result;
@@ -482,7 +506,11 @@ class PosixEnv : public Env {
     }
     return result;
   }
-
+  /**
+   * 文件解锁
+   * @param lock 文件锁
+   * @return 操作状态
+   */
   virtual Status UnlockFile(FileLock* lock) {
     PosixFileLock* my_lock = reinterpret_cast<PosixFileLock*>(lock);
     Status result;

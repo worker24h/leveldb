@@ -125,21 +125,26 @@ class DBImpl : public DB {
   const Options options_;  // options_.comparator == &internal_comparator_
   bool owns_info_log_;
   bool owns_cache_;
-  const std::string dbname_;
+  const std::string dbname_; // 数据库根目录
 
   // table_cache_ provides its own synchronization
   TableCache* table_cache_;
 
   // Lock over the persistent DB state.  Non-NULL iff successfully acquired.
+  // 文件锁指向LOCK文件
   FileLock* db_lock_;
 
   // State below is protected by mutex_
   port::Mutex mutex_;
   port::AtomicPointer shutting_down_;
   port::CondVar bg_cv_;          // Signalled when background work finishes
-  MemTable* mem_;
-  MemTable* imm_;                // Memtable being compacted
+  /* MemTable 是key-value在内存中的表现 */
+  MemTable* mem_; //具有读写属性
+  MemTable* imm_; // 具有只读属性 即将进行压缩处理 imm_是由mem_而来
+
   port::AtomicPointer has_imm_;  // So bg thread can detect non-NULL imm_
+
+  //当前存储key-value的.log文件
   WritableFile* logfile_;
   uint64_t logfile_number_;
   log::Writer* log_;
@@ -168,7 +173,7 @@ class DBImpl : public DB {
   };
   ManualCompaction* manual_compaction_;
 
-  VersionSet* versions_;
+  VersionSet* versions_; /* 版本信息集合 */
 
   // Have we encountered a background error in paranoid mode?
   Status bg_error_;

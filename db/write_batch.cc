@@ -79,10 +79,19 @@ Status WriteBatch::Iterate(Handler* handler) const {
   }
 }
 
+/**
+ * 获取count值
+ * @param b 写任务
+ */
 int WriteBatchInternal::Count(const WriteBatch* b) {
   return DecodeFixed32(b->rep_.data() + 8);
 }
 
+/**
+ * 设置count
+ * @param b 写任务
+ * @param n count值
+ */
 void WriteBatchInternal::SetCount(WriteBatch* b, int n) {
   EncodeFixed32(&b->rep_[8], n);
 }

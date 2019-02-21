@@ -140,7 +140,7 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
   // Reserve ten files or so for other uses and give the rest to TableCache.
   const int table_cache_size = options_.max_open_files - kNumNonTableCacheFiles;
   table_cache_ = new TableCache(dbname_, &options_, table_cache_size);
-
+  // 创建VersionSet集合对象
   versions_ = new VersionSet(dbname_, &options_, table_cache_,
                              &internal_comparator_);
 }
@@ -174,13 +174,16 @@ DBImpl::~DBImpl() {
   }
 }
 
+/**
+ * 创建数据库
+ */
 Status DBImpl::NewDB() {
   VersionEdit new_db;
   new_db.SetComparatorName(user_comparator()->Name());
   new_db.SetLogNumber(0);
   new_db.SetNextFile(2);
   new_db.SetLastSequence(0);
-
+  // 创建MANIFEST文件
   const std::string manifest = DescriptorFileName(dbname_, 1);
   WritableFile* file;
   Status s = env_->NewWritableFile(manifest, &file);
@@ -190,7 +193,9 @@ Status DBImpl::NewDB() {
   {
     log::Writer log(file);
     std::string record;
+    //生成记录 对VersionSet进行编码
     new_db.EncodeTo(&record);
+    //将记录写入到MANIFEST文件中
     s = log.AddRecord(record);
     if (s.ok()) {
       s = file->Close();
@@ -214,7 +219,9 @@ void DBImpl::MaybeIgnoreError(Status* s) const {
     *s = Status::OK();
   }
 }
-
+/**
+ * 删除废弃文件
+ */
 void DBImpl::DeleteObsoleteFiles() {
   if (!bg_error_.ok()) {
     // After a background error, we don't know whether a new version may
@@ -271,6 +278,11 @@ void DBImpl::DeleteObsoleteFiles() {
   }
 }
 
+/**
+ * 数据库环境恢复
+ * @param edit 
+ * @param save_manifest 
+ */
 Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
   mutex_.AssertHeld();
 
@@ -279,14 +291,15 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
   // may already exist from a previous failed creation attempt.
   env_->CreateDir(dbname_);
   assert(db_lock_ == NULL);
+  // 创建文件锁 支持多进程并发访问同一个数据库 env_指向env_posix.cc
   Status s = env_->LockFile(LockFileName(dbname_), &db_lock_);
   if (!s.ok()) {
     return s;
   }
-
+  // 判断CURRENT文件是否存在
   if (!env_->FileExists(CurrentFileName(dbname_))) {
     if (options_.create_if_missing) {
-      s = NewDB();
+      s = NewDB(); //创建数据库，主要包含CURRENT、MANIFEST文件，不包含*.log文件
       if (!s.ok()) {
         return s;
       }
@@ -300,8 +313,11 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
           dbname_, "exists (error_if_exists is true)");
     }
   }
-
-  s = versions_->Recover(save_manifest);
+  /**
+   * 以上是数据文件校验 如果不存在则创建新的数据库文件  以下内容是从数据库文件 
+   * 中恢复数据,如版本信息
+   */
+  s = versions_->Recover(save_manifest);//version_set.cc 
   if (!s.ok()) {
     return s;
   }
@@ -316,6 +332,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
   // produced by an older version of leveldb.
   const uint64_t min_log = versions_->LogNumber();
   const uint64_t prev_log = versions_->PrevLogNumber();
+  //获取所有文件名字
   std::vector<std::string> filenames;
   s = env_->GetChildren(dbname_, &filenames);
   if (!s.ok()) {
@@ -333,7 +350,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
         logs.push_back(number);
     }
   }
-  if (!expected.empty()) {
+  if (!expected.empty()) {//不空表示有文件丢失 出错
     char buf[50];
     snprintf(buf, sizeof(buf), "%d missing files; e.g.",
              static_cast<int>(expected.size()));
@@ -654,9 +671,9 @@ void DBImpl::MaybeScheduleCompaction() {
              manual_compaction_ == NULL &&
              !versions_->NeedsCompaction()) {
     // No work to be done
-  } else {
+  } else {//在imm_不空的前提下 才可能进行压缩
     bg_compaction_scheduled_ = true;
-    env_->Schedule(&DBImpl::BGWork, this);
+    env_->Schedule(&DBImpl::BGWork, this); //创建线程 执行压缩
   }
 }
 
@@ -1473,9 +1490,18 @@ void DBImpl::GetApproximateSizes(
 
 // Default implementations of convenience methods that subclasses of DB
 // can call if they wish
+/**
+ * 向leveldb中添加数据
+ * @param opt 写操作选项
+ * @param key 关键字
+ * @param value 值
+ */
 Status DB::Put(const WriteOptions& opt, const Slice& key, const Slice& value) {
+  // 创建一个批任务 将数据保存到批处理中
   WriteBatch batch;
   batch.Put(key, value);
+
+  // 执行写操作
   return Write(opt, &batch);
 }
 
@@ -1494,12 +1520,14 @@ Status DB::Open(const Options& options, const std::string& dbname,
   DBImpl* impl = new DBImpl(options, dbname);
   impl->mutex_.Lock();
   VersionEdit edit;
-  // Recover handles create_if_missing, error_if_exists
+  // Recover handles create_if_missing, error_if_exists 恢复数据
   bool save_manifest = false;
   Status s = impl->Recover(&edit, &save_manifest);
+  
   if (s.ok() && impl->mem_ == NULL) {
     // Create new log and a corresponding memtable.
     uint64_t new_log_number = impl->versions_->NewFileNumber();
+    // 创建*.log文件
     WritableFile* lfile;
     s = options.env->NewWritableFile(LogFileName(dbname, new_log_number),
                                      &lfile);
@@ -1512,16 +1540,20 @@ Status DB::Open(const Options& options, const std::string& dbname,
       impl->mem_->Ref();
     }
   }
+  
   if (s.ok() && save_manifest) {
     edit.SetPrevLogNumber(0);  // No older logs needed after recovery.
     edit.SetLogNumber(impl->logfile_number_);
-    s = impl->versions_->LogAndApply(&edit, &impl->mutex_);
+    s = impl->versions_->LogAndApply(&edit, &impl->mutex_);//由于log相关数据变化 所以要写回Version信息
   }
+  
   if (s.ok()) {
     impl->DeleteObsoleteFiles();
     impl->MaybeScheduleCompaction();
   }
+  
   impl->mutex_.Unlock();
+  
   if (s.ok()) {
     assert(impl->mem_ != NULL);
     *dbptr = impl;
