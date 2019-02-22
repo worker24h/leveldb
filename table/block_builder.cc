@@ -70,18 +70,23 @@ Slice BlockBuilder::Finish() {
   return Slice(buffer_);
 }
 
+/**
+ * 向block中添加key和value
+ * 当第一次添加key的时候 last_key_是空字符串 所以不会有相同前缀
+ */
 void BlockBuilder::Add(const Slice& key, const Slice& value) {
-  Slice last_key_piece(last_key_);
+  Slice last_key_piece(last_key_);//第一次last_key_为"" size是0
   assert(!finished_);
   assert(counter_ <= options_->block_restart_interval);
-  assert(buffer_.empty() // No values yet?
+  assert(buffer_.empty()
          || options_->comparator->Compare(key, last_key_piece) > 0);
+
   size_t shared = 0;
   if (counter_ < options_->block_restart_interval) {
-    // See how much sharing to do with previous string
+    // See how much sharing to do with previous string  确定key前缀
     const size_t min_length = std::min(last_key_piece.size(), key.size());
     while ((shared < min_length) && (last_key_piece[shared] == key[shared])) {
-      shared++;
+      shared++;//确定两个key 相同前缀的部分
     }
   } else {
     // Restart compression
@@ -90,7 +95,11 @@ void BlockBuilder::Add(const Slice& key, const Slice& value) {
   }
   const size_t non_shared = key.size() - shared;
 
+  //data_block存储格式(新插入key 与 上次key进行比较)
+  // key相同前缀长度|key不同长度|value长度|key不同部分 的内容|value内容
+  
   // Add "<shared><non_shared><value_size>" to buffer_
+  // 新插入key与上次key 进行了字符比较， shared表示相同前缀 non_shared表示新插入key独有字符串
   PutVarint32(&buffer_, shared);
   PutVarint32(&buffer_, non_shared);
   PutVarint32(&buffer_, value.size());

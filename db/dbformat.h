@@ -64,8 +64,10 @@ typedef uint64_t SequenceNumber;
 
 // We leave eight bits empty at the bottom so a type and sequence#
 // can be packed together into 64-bits.
+// 最高8bit预留 因为在生成MemTable时 SkipList节点数据时需要使用这8bit
+// 参考方法 MemTable::Add
 static const SequenceNumber kMaxSequenceNumber =
-    ((0x1ull << 56) - 1);
+    ((0x1ull << 56) - 1); 
 
 struct ParsedInternalKey {
   Slice user_key;

@@ -76,7 +76,7 @@ class MemTable {
   KeyComparator comparator_;
   int refs_;
   Arena arena_;
-  Table table_; /* 跳表 */
+  Table table_; /* 跳表 Table类型重定义typedef */
 
   // No copying allowed
   MemTable(const MemTable&);

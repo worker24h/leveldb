@@ -7,21 +7,24 @@
 
 namespace leveldb {
 
-static const int kBlockSize = 4096;
+static const int kBlockSize = 4096; //一个内存块是4k
 
 Arena::Arena() : memory_usage_(0) {
   alloc_ptr_ = NULL;  // First allocation will allocate a block
   alloc_bytes_remaining_ = 0;
 }
 
-Arena::~Arena() {
+Arena::~Arena() {//释放内存块
   for (size_t i = 0; i < blocks_.size(); i++) {
     delete[] blocks_[i];
   }
 }
 
+/**
+ * 进入此方法就代表可用内存空间不足 需要重新申请
+ */
 char* Arena::AllocateFallback(size_t bytes) {
-  if (bytes > kBlockSize / 4) {
+  if (bytes > kBlockSize / 4) {//优化
     // Object is more than a quarter of our block size.  Allocate it separately
     // to avoid wasting too much space in leftover bytes.
     char* result = AllocateNewBlock(bytes);
@@ -29,7 +32,7 @@ char* Arena::AllocateFallback(size_t bytes) {
   }
 
   // We waste the remaining space in the current block.
-  alloc_ptr_ = AllocateNewBlock(kBlockSize);
+  alloc_ptr_ = AllocateNewBlock(kBlockSize);//申请4k
   alloc_bytes_remaining_ = kBlockSize;
 
   char* result = alloc_ptr_;
@@ -37,7 +40,9 @@ char* Arena::AllocateFallback(size_t bytes) {
   alloc_bytes_remaining_ -= bytes;
   return result;
 }
-
+/**
+ * 以对齐方式申请内存
+ */
 char* Arena::AllocateAligned(size_t bytes) {
   const int align = (sizeof(void*) > 8) ? sizeof(void*) : 8;
   assert((align & (align-1)) == 0);   // Pointer size should be a power of 2
@@ -57,6 +62,11 @@ char* Arena::AllocateAligned(size_t bytes) {
   return result;
 }
 
+/**
+ * 向操作系统申请一个新块block
+ * @param block_bytes 新内存块大小
+ * @return 起始地址
+ */
 char* Arena::AllocateNewBlock(size_t block_bytes) {
   char* result = new char[block_bytes];
   blocks_.push_back(result);

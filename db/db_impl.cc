@@ -358,6 +358,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
   }
 
   // Recover in the order in which the logs were generated
+  // 按顺序恢复.log文件
   std::sort(logs.begin(), logs.end());
   for (size_t i = 0; i < logs.size(); i++) {
     s = RecoverLogFile(logs[i], (i == logs.size() - 1), save_manifest, edit,
@@ -507,7 +508,7 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   mutex_.AssertHeld();
   const uint64_t start_micros = env_->NowMicros();
   FileMetaData meta;
-  meta.number = versions_->NewFileNumber();
+  meta.number = versions_->NewFileNumber();// 获取新文件编号
   pending_outputs_.insert(meta.number);
   Iterator* iter = mem->NewIterator();
   Log(options_.info_log, "Level-0 table #%llu: started",
@@ -548,6 +549,10 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   return s;
 }
 
+/**
+ * 压缩MemTable
+ * 将imm_数据压缩到level0中sstable文件里
+ */
 void DBImpl::CompactMemTable() {
   mutex_.AssertHeld();
   assert(imm_ != NULL);
@@ -577,7 +582,7 @@ void DBImpl::CompactMemTable() {
     has_imm_.Release_Store(NULL);
     DeleteObsoleteFiles();
   } else {
-    RecordBackgroundError(s);
+    RecordBackgroundError(s);//后台压缩线程 遇到问题 发起通知
   }
 }
 
@@ -658,7 +663,9 @@ void DBImpl::RecordBackgroundError(const Status& s) {
     bg_cv_.SignalAll();
   }
 }
-
+/**
+ * 尝试调度压缩流程
+ */
 void DBImpl::MaybeScheduleCompaction() {
   mutex_.AssertHeld();
   if (bg_compaction_scheduled_) {
@@ -677,10 +684,16 @@ void DBImpl::MaybeScheduleCompaction() {
   }
 }
 
+/**
+ * 压缩线程 回调函数
+ */
 void DBImpl::BGWork(void* db) {
   reinterpret_cast<DBImpl*>(db)->BackgroundCall();
 }
 
+/**
+ * 压缩处理
+ */
 void DBImpl::BackgroundCall() {
   MutexLock l(&mutex_);
   assert(bg_compaction_scheduled_);
@@ -689,20 +702,24 @@ void DBImpl::BackgroundCall() {
   } else if (!bg_error_.ok()) {
     // No more background work after a background error.
   } else {
-    BackgroundCompaction();
+    BackgroundCompaction();//压缩处理
   }
 
-  bg_compaction_scheduled_ = false;
+  bg_compaction_scheduled_ = false; //表示压缩完成
 
   // Previous compaction may have produced too many files in a level,
   // so reschedule another compaction if needed.
-  MaybeScheduleCompaction();
+  MaybeScheduleCompaction(); //再次尝试压缩 因为有可能上一次压缩产生的文件比较多 所以在此进行压缩
   bg_cv_.SignalAll();
 }
-
+/**
+ * 压缩真正入口函数
+ * 1、imm_ MemTable不空则压缩MemTable 生成sstable文件
+ * 2、对现有level文件进行压缩，避免各个level文件过多以及清理已删除的数据
+ */
 void DBImpl::BackgroundCompaction() {
   mutex_.AssertHeld();
-
+  //压缩MemTable
   if (imm_ != NULL) {
     CompactMemTable();
     return;
@@ -711,7 +728,7 @@ void DBImpl::BackgroundCompaction() {
   Compaction* c;
   bool is_manual = (manual_compaction_ != NULL);
   InternalKey manual_end;
-  if (is_manual) {
+  if (is_manual) {//手动压缩
     ManualCompaction* m = manual_compaction_;
     c = versions_->CompactRange(m->level, m->begin, m->end);
     m->done = (c == NULL);
@@ -724,7 +741,7 @@ void DBImpl::BackgroundCompaction() {
         (m->begin ? m->begin->DebugString().c_str() : "(begin)"),
         (m->end ? m->end->DebugString().c_str() : "(end)"),
         (m->done ? "(end)" : manual_end.DebugString().c_str()));
-  } else {
+  } else {//自动压缩
     c = versions_->PickCompaction();
   }
 
@@ -1231,8 +1248,10 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
     return w.status;
   }
 
-  // May temporarily unlock and wait. 保证有足够空间可写
+  // May temporarily unlock and wait. 
+  // 保证有足够空间可写. 该方正常返回一定保证有足够空间可写入数据
   Status status = MakeRoomForWrite(my_batch == NULL);
+  
   uint64_t last_sequence = versions_->LastSequence();
   Writer* last_writer = &w;
   
@@ -1354,6 +1373,8 @@ WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
 /*
  * 确保有足够空间可写
  * @param force true表示强制立刻写入  false表示延迟写入
+ * 如果mem_没有可用空间可写，则会重新生成mem_ 旧的mem_转成imm_ 然后启动后台线程
+ * 进行压缩处理等相关操作
  */
 Status DBImpl::MakeRoomForWrite(bool force) {
   mutex_.AssertHeld();
@@ -1382,7 +1403,9 @@ Status DBImpl::MakeRoomForWrite(bool force) {
     } else if (!force &&
                (mem_->ApproximateMemoryUsage() <= options_.write_buffer_size)) {
       // There is room in current memtable
-      // 表示mem_有足够空间可写 直接break
+      // MemTable的内存是动态扩展，
+      //    当MemTable已经使用的空间达到了阈值(4M),则不再继续向当前MemTable对象追加数据(需要重新创建)  
+      //    当MemTable已经使用的空间没有达到阈值(4M), 则继续使用
       break;
     } else if (imm_ != NULL) {/* 表示mem_已满 需要等待imm_持久化到磁盘 */
       // We have filled up the current memtable, but the previous

@@ -145,9 +145,9 @@ class DBImpl : public DB {
   port::AtomicPointer has_imm_;  // So bg thread can detect non-NULL imm_
 
   //当前存储key-value的.log文件
-  WritableFile* logfile_;
+  WritableFile* logfile_; //真实文件
   uint64_t logfile_number_;
-  log::Writer* log_;
+  log::Writer* log_; //包装类 包含WritableFile对象
   uint32_t seed_;                // For sampling.
 
   // Queue of writers.
@@ -163,7 +163,8 @@ class DBImpl : public DB {
   // Has a background compaction been scheduled or is running?
   bool bg_compaction_scheduled_;
 
-  // Information for a manual compaction
+  // Information for a manual Compaction
+  // 手动压缩 需要指定起始-结束序号
   struct ManualCompaction {
     int level;
     bool done;

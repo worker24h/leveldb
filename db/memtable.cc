@@ -64,7 +64,12 @@ class MemTableIterator: public Iterator {
   virtual void SeekToLast() { iter_.SeekToLast(); }
   virtual void Next() { iter_.Next(); }
   virtual void Prev() { iter_.Prev(); }
-  virtual Slice key() const { return GetLengthPrefixedSlice(iter_.key()); }
+  virtual Slice key() const {
+    // iter_.key()返回的是Slice结构 也就是整条数据, 该数据格式如下(可查看MemTable::Add方法):
+    // [internal-key-size] + [key] + [seq|type] + [value-size] + [value]
+    // GetLengthPrefixedSlice方法返回值是[key] + [seq|type]
+    return GetLengthPrefixedSlice(iter_.key());  //SkipList.h key()
+  }
   virtual Slice value() const {
     Slice key_slice = GetLengthPrefixedSlice(iter_.key());
     return GetLengthPrefixedSlice(key_slice.data() + key_slice.size());
@@ -73,7 +78,7 @@ class MemTableIterator: public Iterator {
   virtual Status status() const { return Status::OK(); }
 
  private:
-  MemTable::Table::Iterator iter_;
+  MemTable::Table::Iterator iter_; //SkipList.h中定义
   std::string tmp_;       // For passing to EncodeKey
 
   // No copying allowed
@@ -104,7 +109,7 @@ void MemTable::Add(SequenceNumber s, ValueType type,
   char* p = EncodeVarint32(buf, internal_key_size);
   memcpy(p, key.data(), key_size);
   p += key_size;
-  EncodeFixed64(p, (s << 8) | type);
+  EncodeFixed64(p, (s << 8) | type);//SequenceNumber最高8bit是预留给此处使用
   p += 8;
   //添加value长度及内容
   p = EncodeVarint32(p, val_size);

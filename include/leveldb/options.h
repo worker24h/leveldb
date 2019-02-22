@@ -109,7 +109,7 @@ struct Options {
   // This parameter can be changed dynamically.  Most clients should
   // leave this parameter alone.
   //
-  // Default: 16
+  // Default: 16 ÷ÿ∆Ùµ„º‰∏Ù
   int block_restart_interval;
 
   // Leveldb will write up to this amount of bytes to a file before

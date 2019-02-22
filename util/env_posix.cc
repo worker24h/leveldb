@@ -635,6 +635,10 @@ PosixEnv::PosixEnv()
   PthreadCall("cvar_init", pthread_cond_init(&bgsignal_, NULL));
 }
 
+/**
+ * 后台压缩线程启动
+ * 后台压缩线程一旦启动就不会退出
+ */
 void PosixEnv::Schedule(void (*function)(void*), void* arg) {
   PthreadCall("lock", pthread_mutex_lock(&mu_));
 
@@ -643,7 +647,7 @@ void PosixEnv::Schedule(void (*function)(void*), void* arg) {
     started_bgthread_ = true;
     PthreadCall(
         "create thread",
-        pthread_create(&bgthread_, NULL,  &PosixEnv::BGThreadWrapper, this));
+        pthread_create(&bgthread_, NULL,  &PosixEnv::BGThreadWrapper, this)); //最终执行BGThread()
   }
 
   // If the queue is currently empty, the background thread may currently be
@@ -660,12 +664,15 @@ void PosixEnv::Schedule(void (*function)(void*), void* arg) {
   PthreadCall("unlock", pthread_mutex_unlock(&mu_));
 }
 
+/**
+ * 真正线程函数
+ */
 void PosixEnv::BGThread() {
   while (true) {
     // Wait until there is an item that is ready to run
     PthreadCall("lock", pthread_mutex_lock(&mu_));
     while (queue_.empty()) {
-      PthreadCall("wait", pthread_cond_wait(&bgsignal_, &mu_));
+      PthreadCall("wait", pthread_cond_wait(&bgsignal_, &mu_));//队列是空则等待
     }
 
     void (*function)(void*) = queue_.front().function;

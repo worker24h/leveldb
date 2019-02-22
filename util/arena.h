@@ -36,10 +36,10 @@ class Arena {
 
   // Allocation state
   char* alloc_ptr_;
-  size_t alloc_bytes_remaining_;
+  size_t alloc_bytes_remaining_; //内存池剩余可用空间
 
   // Array of new[] allocated memory blocks
-  std::vector<char*> blocks_;
+  std::vector<char*> blocks_; /* 保存内存块链表 */
 
   // Total memory usage of the arena.
   port::AtomicPointer memory_usage_;
@@ -49,6 +49,9 @@ class Arena {
   void operator=(const Arena&);
 };
 
+/**
+ * 申请内存
+ */
 inline char* Arena::Allocate(size_t bytes) {
   // The semantics of what to return are a bit messy if we allow
   // 0-byte allocations, so we disallow them here (we don't need

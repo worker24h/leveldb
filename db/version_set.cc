@@ -1333,6 +1333,9 @@ Iterator* VersionSet::MakeInputIterator(Compaction* c) {
   return result;
 }
 
+/**
+ * 选择性压缩  即自动压缩流程
+ */
 Compaction* VersionSet::PickCompaction() {
   Compaction* c;
   int level;

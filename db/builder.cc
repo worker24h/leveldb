@@ -22,16 +22,16 @@ Status BuildTable(const std::string& dbname,
                   FileMetaData* meta) {
   Status s;
   meta->file_size = 0;
-  iter->SeekToFirst();
+  iter->SeekToFirst();//Iterator迭代遍历跳表SkipList 然后跳到第一个节点
 
   std::string fname = TableFileName(dbname, meta->number);
   if (iter->Valid()) {
     WritableFile* file;
-    s = env->NewWritableFile(fname, &file);
+    s = env->NewWritableFile(fname, &file);// 创建.ldb文件
     if (!s.ok()) {
       return s;
     }
-
+    // 迭代遍历 key-value 存储到TableBuilder对象中
     TableBuilder* builder = new TableBuilder(options, file);
     meta->smallest.DecodeFrom(iter->key());
     for (; iter->Valid(); iter->Next()) {
