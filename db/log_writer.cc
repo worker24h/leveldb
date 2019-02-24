@@ -50,7 +50,7 @@ Status Writer::AddRecord(const Slice& slice) {
     const int leftover = kBlockSize - block_offset_;
     assert(leftover >= 0);
     if (leftover < kHeaderSize) {
-      // Switch to a new block
+      // Switch to a new block 可用空间小于7字节 则启用一个新的block 并且将剩余空间补0
       if (leftover > 0) {
         // Fill the trailer (literal below relies on kHeaderSize being 7)
         assert(kHeaderSize == 7);
@@ -63,7 +63,7 @@ Status Writer::AddRecord(const Slice& slice) {
     assert(kBlockSize - block_offset_ - kHeaderSize >= 0);
     //可用空间
     const size_t avail = kBlockSize - block_offset_ - kHeaderSize;
-    const size_t fragment_length = (left < avail) ? left : avail;
+    const size_t fragment_length = (left < avail) ? left : avail; //每次写入大小
 
     RecordType type;
     const bool end = (left == fragment_length);

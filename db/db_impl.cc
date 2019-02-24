@@ -178,6 +178,7 @@ DBImpl::~DBImpl() {
  * 创建数据库
  */
 Status DBImpl::NewDB() {
+  //设置VersionSet属性
   VersionEdit new_db;
   new_db.SetComparatorName(user_comparator()->Name());
   new_db.SetLogNumber(0);
@@ -332,7 +333,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
   // produced by an older version of leveldb.
   const uint64_t min_log = versions_->LogNumber();
   const uint64_t prev_log = versions_->PrevLogNumber();
-  //获取所有文件名字
+  //获取目录下所有目录或文件名字
   std::vector<std::string> filenames;
   s = env_->GetChildren(dbname_, &filenames);
   if (!s.ok()) {
@@ -358,7 +359,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
   }
 
   // Recover in the order in which the logs were generated
-  // 按顺序恢复.log文件
+  // 按从小到大顺序读取.log文件 生成MemTable结构
   std::sort(logs.begin(), logs.end());
   for (size_t i = 0; i < logs.size(); i++) {
     s = RecoverLogFile(logs[i], (i == logs.size() - 1), save_manifest, edit,
@@ -380,6 +381,14 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
   return Status::OK();
 }
 
+/**
+ * 读取.log文件 恢复MemTable
+ * @param log_number .log文件编号
+ * @param last_log   是否为最后一个.log文件
+ * @param save_manifest 是否需要重新创建一个MANIFEST文件
+ * @param edit 操作
+ * @param max_sequence 最大序号 输出参数
+ */
 Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
                               bool* save_manifest, VersionEdit* edit,
                               SequenceNumber* max_sequence) {
@@ -516,7 +525,7 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
 
   Status s;
   {
-    mutex_.Unlock();
+    mutex_.Unlock();//将memtable中数据写入到ldb文件中
     s = BuildTable(dbname_, env_, options_, table_cache_, iter, &meta);
     mutex_.Lock();
   }
@@ -533,15 +542,18 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   // should not be added to the manifest.
   int level = 0;
   if (s.ok() && meta.file_size > 0) {
+    /* 获取用户数据 key 非内部internal_key */
     const Slice min_user_key = meta.smallest.user_key();
     const Slice max_user_key = meta.largest.user_key();
     if (base != NULL) {
       level = base->PickLevelForMemTableOutput(min_user_key, max_user_key);
     }
+    //保存metafiledata
     edit->AddFile(level, meta.number, meta.file_size,
                   meta.smallest, meta.largest);
   }
 
+  /* 压缩统计信息 */
   CompactionStats stats;
   stats.micros = env_->NowMicros() - start_micros;
   stats.bytes_written = meta.file_size;
@@ -1589,7 +1601,7 @@ Status DB::Open(const Options& options, const std::string& dbname,
     }
   }
   
-  if (s.ok() && save_manifest) {
+  if (s.ok() && save_manifest) {//save_manifest为true表示需要重新创建一个MANIFEST文件
     edit.SetPrevLogNumber(0);  // No older logs needed after recovery.
     edit.SetLogNumber(impl->logfile_number_);
     s = impl->versions_->LogAndApply(&edit, &impl->mutex_);//由于log相关数据变化 所以要写回Version信息

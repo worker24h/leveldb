@@ -37,7 +37,7 @@ int MemTable::KeyComparator::operator()(const char* aptr, const char* bptr)
     const {
   // Internal keys are encoded as length-prefixed strings.
   Slice a = GetLengthPrefixedSlice(aptr);
-  Slice b = GetLengthPrefixedSlice(bptr);
+  Slice b = GetLengthPrefixedSlice(bptr); //返回值是InternalKey对象生成的数据
   return comparator.Compare(a, b);
 }
 
@@ -115,7 +115,7 @@ void MemTable::Add(SequenceNumber s, ValueType type,
   p = EncodeVarint32(p, val_size);
   memcpy(p, value.data(), val_size);
   assert((p + val_size) - buf == encoded_len);
-  //插入到跳表中
+  //插入到跳表中 比较规则 比较internalkey 可参考InternalKeyComparator::Compare
   table_.Insert(buf);
 }
 

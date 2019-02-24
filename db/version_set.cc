@@ -37,12 +37,19 @@ static int64_t ExpandedCompactionByteSizeLimit(const Options* options) {
   return 25 * TargetFileSize(options);
 }
 
+/**
+ * 计算每层占用最大字节数
+ * level0 不按照字节数计算 按照文件数量计算
+ * level1 是10M
+ * level2 是10*10M
+ * level3 是10*10*10M
+ */
 static double MaxBytesForLevel(const Options* options, int level) {
   // Note: the result for level zero is not really used since we set
   // the level-0 compaction threshold based on number of files.
 
   // Result for both level-0 and level-1
-  double result = 10. * 1048576.0;
+  double result = 10. * 1048576.0; // 10*1M  1048576 = 1M
   while (level > 1) {
     result *= 10;
     level--;
@@ -55,6 +62,10 @@ static uint64_t MaxFileSizeForLevel(const Options* options, int level) {
   return TargetFileSize(options);
 }
 
+/**
+ * 统计文件大小
+ * @param files 文件集合
+ */
 static int64_t TotalFileSize(const std::vector<FileMetaData*>& files) {
   int64_t sum = 0;
   for (size_t i = 0; i < files.size(); i++) {
@@ -498,7 +509,11 @@ bool Version::OverlapInLevel(int level,
   return SomeFileOverlapsRange(vset_->icmp_, (level > 0), files_[level],
                                smallest_user_key, largest_user_key);
 }
-
+/**
+ * 根据最小key和最大key查找所在层次
+ * @param smallest_user_key 最小用户数据key
+ * @param largest_user_key  最大用户数据key
+ */
 int Version::PickLevelForMemTableOutput(
     const Slice& smallest_user_key,
     const Slice& largest_user_key) {
@@ -600,12 +615,15 @@ std::string Version::DebugString() const {
 // A helper class so we can efficiently apply a whole sequence
 // of edits to a particular state without creating intermediate
 // Versions that contain full copies of the intermediate state.
+/**
+ * Builder是辅助类 保存从文件中(MANIFEST)恢复出的数据
+ */
 class VersionSet::Builder {
  private:
   // Helper to sort by v->files_[file_number].smallest
   struct BySmallestKey {
     const InternalKeyComparator* internal_comparator;
-
+    // 重载括号 运算符
     bool operator()(FileMetaData* f1, FileMetaData* f2) const {
       int r = internal_comparator->Compare(f1->smallest, f2->smallest);
       if (r != 0) {
@@ -620,12 +638,12 @@ class VersionSet::Builder {
   typedef std::set<FileMetaData*, BySmallestKey> FileSet;
   struct LevelState {
     std::set<uint64_t> deleted_files;
-    FileSet* added_files;
+    FileSet* added_files;//typedef 重定义
   };
 
   VersionSet* vset_;
-  Version* base_;
-  LevelState levels_[config::kNumLevels];
+  Version* base_; /* 旧数据 */
+  LevelState levels_[config::kNumLevels]; /* 新数据 */
 
  public:
   // Initialize a builder with the files from *base and other info from *vset
@@ -728,20 +746,24 @@ class VersionSet::Builder {
   }
 
   // Save the current state in *v.
+  // 将旧的Version信息(base_指针)与levels_进行合并 清除已经标为deleted文件
+  // 并把最终信息保存到指针v中
   void SaveTo(Version* v) {
     BySmallestKey cmp;
     cmp.internal_comparator = &vset_->icmp_;
+    // 循环遍历每一层
     for (int level = 0; level < config::kNumLevels; level++) {
       // Merge the set of added files with the set of pre-existing files.
       // Drop any deleted files.  Store the result in *v.
       const std::vector<FileMetaData*>& base_files = base_->files_[level];
       std::vector<FileMetaData*>::const_iterator base_iter = base_files.begin();
       std::vector<FileMetaData*>::const_iterator base_end = base_files.end();
+
       const FileSet* added = levels_[level].added_files;
       v->files_[level].reserve(base_files.size() + added->size());//增加vector空间
       for (FileSet::const_iterator added_iter = added->begin();
            added_iter != added->end();
-           ++added_iter) {
+           ++added_iter) {// 循环遍历新数据 与旧数据 进行比较
           // Add all smaller files listed in base_
           for (std::vector<FileMetaData*>::const_iterator bpos
                    = std::upper_bound(base_iter, base_end, *added_iter, cmp);
@@ -775,14 +797,19 @@ class VersionSet::Builder {
 #endif
     }
   }
-
+  /**
+   * 将FileMetaData保存到指定层中
+   * @param v Version对象
+   * @param level 指定层 [0-6]
+   * @param f 文件元数据
+   */
   void MaybeAddFile(Version* v, int level, FileMetaData* f) {
-    if (levels_[level].deleted_files.count(f->number) > 0) {
+    if (levels_[level].deleted_files.count(f->number) > 0) {//count统计在set中出现次数
       // File is deleted: do nothing
     } else {
       std::vector<FileMetaData*>* files = &v->files_[level];
       if (level > 0 && !files->empty()) {
-        // Must not overlap
+        // Must not overlap 不能重叠
         assert(vset_->icmp_.Compare((*files)[files->size()-1]->largest,
                                     f->smallest) < 0);
       }
@@ -833,7 +860,7 @@ void VersionSet::AppendVersion(Version* v) {
   current_ = v;
   v->Ref();
 
-  // Append to linked list 双向链表方式
+  // Append to linked list 双向链表方式 追加到链表尾部
   v->prev_ = dummy_versions_.prev_;
   v->next_ = &dummy_versions_;
   v->prev_->next_ = v;
@@ -931,6 +958,8 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
 /**
  * 恢复数据 从文件中读取出VersionEdit来初始化VersionSet
  * @param save_manifest  输出参数 
+ *          true  -  需要创建新的manifest文件
+ *          false -  不需要创建新的manifest文件
  * @return 返回操作状态
  */
 Status VersionSet::Recover(bool *save_manifest) {
@@ -968,7 +997,9 @@ Status VersionSet::Recover(bool *save_manifest) {
   uint64_t last_sequence = 0;
   uint64_t log_number = 0;
   uint64_t prev_log_number = 0;
-  Builder builder(this, current_); //version_set.cc
+  // current_ 保存的当前已有的Version信息 后面会调用Builder saveto方法与current_
+  // 指定的Version信息进行合并
+  Builder builder(this, current_); //Builder类定义在version_set.cc
 
   {
     LogReporter reporter;
@@ -980,7 +1011,7 @@ Status VersionSet::Recover(bool *save_manifest) {
     // 读取出来的是VersionEdit对象
     while (reader.ReadRecord(&record, &scratch) && s.ok()) {//log_reader.cc
       VersionEdit edit;
-      s = edit.DecodeFrom(record);//解码
+      s = edit.DecodeFrom(record);//解码 到VersionEdit
       if (s.ok()) {
         if (edit.has_comparator_ &&
             edit.comparator_ != icmp_.user_comparator()->Name()) {
@@ -990,7 +1021,7 @@ Status VersionSet::Recover(bool *save_manifest) {
         }
       }
 
-      if (s.ok()) {//将VersionEdit应用到VersionSet中
+      if (s.ok()) {//将VersionEdit文件信息以及压缩点保存到builder中
         builder.Apply(&edit);
       }
 
@@ -1036,8 +1067,10 @@ Status VersionSet::Recover(bool *save_manifest) {
   }
 
   if (s.ok()) {
+    //创建新的Version 与旧的Version进行合并，并保存到新的Version中
     Version* v = new Version(this);
     builder.SaveTo(v);
+    
     // Install recovered version
     Finalize(v);
     AppendVersion(v);// 将version插入到VersionSet中
@@ -1058,6 +1091,13 @@ Status VersionSet::Recover(bool *save_manifest) {
   return s;
 }
 
+/**
+ * 复用Manifest文件
+ * @param dscname 完整路径
+ * @param dscbase 文件名
+ * @return true  - 复用
+ *         false - 不复用
+ */
 bool VersionSet::ReuseManifest(const std::string& dscname,
                                const std::string& dscbase) {
   if (!options_->reuse_logs) {
@@ -1071,7 +1111,7 @@ bool VersionSet::ReuseManifest(const std::string& dscname,
       !env_->GetFileSize(dscname, &manifest_size).ok() ||
       // Make new compacted MANIFEST if old one is too big
       manifest_size >= TargetFileSize(options_)) {
-    return false;
+    return false;//如果MANIFEST文件超过max_file_size则重新创建一个新的MANIFEST文件
   }
 
   assert(descriptor_file_ == NULL);
@@ -1101,7 +1141,7 @@ void VersionSet::Finalize(Version* v) {
   // Precomputed best level for next compaction
   int best_level = -1;
   double best_score = -1;
-
+  // 为什么少一层呢? 最后一层不需要压缩
   for (int level = 0; level < config::kNumLevels-1; level++) {
     double score;
     if (level == 0) {
@@ -1129,7 +1169,7 @@ void VersionSet::Finalize(Version* v) {
       score =
           static_cast<double>(level_bytes) / MaxBytesForLevel(options_, level);
     }
-
+    //始终保存 分数最大以及level层次
     if (score > best_score) {
       best_level = level;
       best_score = score;
@@ -1227,6 +1267,10 @@ uint64_t VersionSet::ApproximateOffsetOf(Version* v, const InternalKey& ikey) {
   return result;
 }
 
+/**
+ * 遍历VersionSet所有Version 返回Version中文件编号
+ * @param live 保存文件编号 输出参数
+ */
 void VersionSet::AddLiveFiles(std::set<uint64_t>* live) {
   for (Version* v = dummy_versions_.next_;
        v != &dummy_versions_;

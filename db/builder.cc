@@ -24,7 +24,7 @@ Status BuildTable(const std::string& dbname,
   meta->file_size = 0;
   iter->SeekToFirst();//Iterator迭代遍历跳表SkipList 然后跳到第一个节点
 
-  std::string fname = TableFileName(dbname, meta->number);
+  std::string fname = TableFileName(dbname, meta->number);//生成.ldb文件名称
   if (iter->Valid()) {
     WritableFile* file;
     s = env->NewWritableFile(fname, &file);// 创建.ldb文件
@@ -35,14 +35,14 @@ Status BuildTable(const std::string& dbname,
     TableBuilder* builder = new TableBuilder(options, file);
     meta->smallest.DecodeFrom(iter->key());
     for (; iter->Valid(); iter->Next()) {
-      Slice key = iter->key();
+      Slice key = iter->key();//这里的Key是InternalKey中rep_,并非用户数据中key
       meta->largest.DecodeFrom(key);
       builder->Add(key, iter->value());
     }
 
     // Finish and check for builder errors
     if (s.ok()) {
-      s = builder->Finish();
+      s = builder->Finish();// 写入filter_block metaindex_block index_block以及footer字段数据
       if (s.ok()) {
         meta->file_size = builder->FileSize();
         assert(meta->file_size > 0);

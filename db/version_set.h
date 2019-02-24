@@ -305,12 +305,12 @@ class VersionSet {
   uint64_t log_number_;
   uint64_t prev_log_number_;  // 0 or backing store for memtable being compacted
 
-  // Opened lazily
+  // Opened lazily 
   WritableFile* descriptor_file_;
   log::Writer* descriptor_log_;
   
   Version dummy_versions_;  // Head of circular doubly-linked list of versions.
-  Version* current_;        // == dummy_versions_.prev_
+  Version* current_;        // == dummy_versions_.prev_ 始终指向链表最后一个
 
   // Per-level key at which the next compaction at that level should start.
   // Either an empty string, or a valid InternalKey.

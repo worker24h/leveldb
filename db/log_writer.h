@@ -38,7 +38,7 @@ class Writer {
 
  private:
   WritableFile* dest_;
-  int block_offset_;       // Current offset in block
+  int block_offset_;       // Current offset in block 在一个block中可写位置(已用空间大小)
 
   // crc32c values for all supported record types.  These are
   // pre-computed to reduce the overhead of computing the crc of the

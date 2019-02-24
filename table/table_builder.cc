@@ -21,7 +21,7 @@ struct TableBuilder::Rep {
   Options options;
   Options index_block_options;
   WritableFile* file;
-  uint64_t offset;
+  uint64_t offset; //偏移量 文件可写位置 
   Status status;
   BlockBuilder data_block; // 保存key-value
   BlockBuilder index_block;
@@ -117,7 +117,7 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
     r->options.comparator->FindShortestSeparator(&r->last_key, key);
     std::string handle_encoding;
     r->pending_handle.EncodeTo(&handle_encoding);
-    r->index_block.Add(r->last_key, Slice(handle_encoding));
+    r->index_block.Add(r->last_key, Slice(handle_encoding));//讲解如何block信息存到index_block中
     r->pending_index_entry = false;
   }
 
@@ -127,7 +127,7 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
 
   r->last_key.assign(key.data(), key.size());
   r->num_entries++;
-  r->data_block.Add(key, value);
+  r->data_block.Add(key, value);//将key-value添加到data_block中
 
   /* 如果block size大于4k 则刷新 */
   const size_t estimated_block_size = r->data_block.CurrentSizeEstimate();
@@ -145,11 +145,13 @@ void TableBuilder::Flush() {
   if (!ok()) return;
   if (r->data_block.empty()) return;
   assert(!r->pending_index_entry);
-  WriteBlock(&r->data_block, &r->pending_handle);
+  WriteBlock(&r->data_block, &r->pending_handle);// 将block写入文件
+
   if (ok()) {
     r->pending_index_entry = true;//创建新的index_block
     r->status = r->file->Flush();
   }
+  
   if (r->filter_block != NULL) {
     r->filter_block->StartBlock(r->offset);
   }
@@ -162,7 +164,7 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
   //    crc: uint32
   assert(ok());
   Rep* r = rep_;
-  Slice raw = block->Finish();
+  Slice raw = block->Finish();//data_block原始数据
 
   Slice block_contents;
   CompressionType type = r->options.compression;
@@ -172,7 +174,7 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
       block_contents = raw;
       break;
 
-    case kSnappyCompression: {
+    case kSnappyCompression: {//对data_block进行压缩
       std::string* compressed = &r->compressed_output;
       if (port::Snappy_Compress(raw.data(), raw.size(), compressed) &&
           compressed->size() < raw.size() - (raw.size() / 8u)) {
@@ -186,6 +188,8 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
       break;
     }
   }
+
+  //写入文件 并且重置block对象
   WriteRawBlock(block_contents, type, handle);
   r->compressed_output.clear();
   block->Reset();

@@ -60,12 +60,15 @@ size_t BlockBuilder::CurrentSizeEstimate() const {
           sizeof(uint32_t));                      // Restart array length
 }
 
+/**
+ * 将重启点信息追加到buffer中
+ */
 Slice BlockBuilder::Finish() {
   // Append restart array
   for (size_t i = 0; i < restarts_.size(); i++) {
-    PutFixed32(&buffer_, restarts_[i]);
+    PutFixed32(&buffer_, restarts_[i]);//重启点偏移
   }
-  PutFixed32(&buffer_, restarts_.size());
+  PutFixed32(&buffer_, restarts_.size());//重启点个数
   finished_ = true;
   return Slice(buffer_);
 }
@@ -89,7 +92,7 @@ void BlockBuilder::Add(const Slice& key, const Slice& value) {
       shared++;//确定两个key 相同前缀的部分
     }
   } else {
-    // Restart compression
+    // 为了迅速查找key 每16条key-value就进行一次统计 实际记录偏移
     restarts_.push_back(buffer_.size());
     counter_ = 0;
   }
@@ -108,7 +111,7 @@ void BlockBuilder::Add(const Slice& key, const Slice& value) {
   buffer_.append(key.data() + shared, non_shared);
   buffer_.append(value.data(), value.size());
 
-  // Update state
+  // Update state 相当于把新key存储到last_key_中
   last_key_.resize(shared);
   last_key_.append(key.data() + shared, non_shared);
   assert(Slice(last_key_) == key);

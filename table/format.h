@@ -19,6 +19,7 @@ struct ReadOptions;
 
 // BlockHandle is a pointer to the extent of a file that stores a data
 // block or a meta block.
+// 处理data_block 可参考方法TableBuilder::WriteRawBlock
 class BlockHandle {
  public:
   BlockHandle();

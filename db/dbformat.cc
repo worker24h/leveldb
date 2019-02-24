@@ -54,6 +54,7 @@ int InternalKeyComparator::Compare(const Slice& akey, const Slice& bkey) const {
   //    decreasing type (though sequence# should be enough to disambiguate)
   int r = user_comparator_->Compare(ExtractUserKey(akey), ExtractUserKey(bkey));
   if (r == 0) {
+    //这里num应该是SequenceNumber|type
     const uint64_t anum = DecodeFixed64(akey.data() + akey.size() - 8);
     const uint64_t bnum = DecodeFixed64(bkey.data() + bkey.size() - 8);
     if (anum > bnum) {

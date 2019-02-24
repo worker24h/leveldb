@@ -95,7 +95,7 @@ class SkipList {
   };
 
  private:
-  enum { kMaxHeight = 12 };
+  enum { kMaxHeight = 12 }; //跳表最高12层
 
   // Immutable after construction
   Comparator const compare_;
@@ -255,7 +255,8 @@ int SkipList<Key,Comparator>::RandomHeight() {
 template<typename Key, class Comparator>
 bool SkipList<Key,Comparator>::KeyIsAfterNode(const Key& key, Node* n) const {
   // NULL n is considered infinite
-  return (n != NULL) && (compare_(n->key, key) < 0);
+  // 这里先调用重载()运算符 MemTable::KeyComparator::operator()
+  return (n != NULL) && (compare_(n->key, key) < 0);  
 }
 
 template<typename Key, class Comparator>

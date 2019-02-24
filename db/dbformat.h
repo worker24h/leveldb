@@ -143,6 +143,8 @@ class InternalFilterPolicy : public FilterPolicy {
 // Modules in this directory should keep internal keys wrapped inside
 // the following class instead of plain strings so that we do not
 // incorrectly use string comparisons instead of an InternalKeyComparator.
+// InternalKey实际是由三部分组成: 用户数据key+序号+操作类型(添加/删除)，其中
+// 序号和操作类型占用8字节
 class InternalKey {
  private:
   std::string rep_;
