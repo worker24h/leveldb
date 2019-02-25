@@ -322,6 +322,7 @@ class VersionSet {
 };
 
 // A Compaction encapsulates information about a compaction.
+// 对于压缩的相关信息的一种封装
 class Compaction {
  public:
   ~Compaction();

@@ -727,7 +727,7 @@ void DBImpl::BackgroundCall() {
 /**
  * 压缩真正入口函数
  * 1、imm_ MemTable不空则压缩MemTable 生成sstable文件
- * 2、对现有level文件进行压缩，避免各个level文件过多以及清理已删除的数据
+ * 2、对现有level文件进行压缩，避免各个level文件过多以及清理掉标记为删除的数据
  */
 void DBImpl::BackgroundCompaction() {
   mutex_.AssertHeld();
@@ -740,7 +740,7 @@ void DBImpl::BackgroundCompaction() {
   Compaction* c;
   bool is_manual = (manual_compaction_ != NULL);
   InternalKey manual_end;
-  if (is_manual) {//手动压缩
+  if (is_manual) {//手动压缩 一般用于测试debug
     ManualCompaction* m = manual_compaction_;
     c = versions_->CompactRange(m->level, m->begin, m->end);
     m->done = (c == NULL);
@@ -760,7 +760,7 @@ void DBImpl::BackgroundCompaction() {
   Status status;
   if (c == NULL) {
     // Nothing to do
-  } else if (!is_manual && c->IsTrivialMove()) {
+  } else if (!is_manual && c->IsTrivialMove()) {//文件不需要合并 只需要修改所属层次
     // Move file to next level
     assert(c->num_input_files(0) == 1);
     FileMetaData* f = c->input(0, 0);
@@ -778,7 +778,7 @@ void DBImpl::BackgroundCompaction() {
         static_cast<unsigned long long>(f->file_size),
         status.ToString().c_str(),
         versions_->LevelSummary(&tmp));
-  } else {
+  } else {//level和level+1中有key值重合 因此需要合并
     CompactionState* compact = new CompactionState(c);
     status = DoCompactionWork(compact);
     if (!status.ok()) {

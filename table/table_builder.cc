@@ -50,7 +50,7 @@ struct TableBuilder::Rep {
   // Invariant: r->pending_index_entry is true only if data_block is empty.
   // Default: false
   bool pending_index_entry; //是否需要增加index entry 当有新的data block时才会新加 才会设置为true
-  BlockHandle pending_handle;  // Handle to add to index block
+  BlockHandle pending_handle;  // Handle to add to index block 记录当前block偏移量以及block大小
 
   std::string compressed_output;
 
@@ -112,7 +112,7 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
     assert(r->options.comparator->Compare(key, Slice(r->last_key)) > 0);//按照字符比较
   }
 
-  if (r->pending_index_entry) {
+  if (r->pending_index_entry) {//是否需要增加index_entry
     assert(r->data_block.empty());
     r->options.comparator->FindShortestSeparator(&r->last_key, key);
     std::string handle_encoding;

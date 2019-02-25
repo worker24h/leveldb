@@ -117,7 +117,7 @@ class SkipList {
 
   Node* NewNode(const Key& key, int height);
   int RandomHeight();
-  bool Equal(const Key& a, const Key& b) const { return (compare_(a, b) == 0); }
+  bool Equal(const Key& a, const Key& b) const { return (compare_(a, b) == 0); } // db/memtable.cc
 
   // Return true if key is greater than the data stored in "n"
   bool KeyIsAfterNode(const Key& key, Node* n) const;
@@ -266,7 +266,7 @@ typename SkipList<Key,Comparator>::Node* SkipList<Key,Comparator>::FindGreaterOr
   int level = GetMaxHeight() - 1;
   while (true) {
     Node* next = x->Next(level);
-    if (KeyIsAfterNode(key, next)) {
+    if (KeyIsAfterNode(key, next)) {//当前key值是否在next节点之后
       // Keep searching in this list
       x = next;
     } else {

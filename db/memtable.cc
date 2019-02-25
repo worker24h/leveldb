@@ -15,7 +15,7 @@ static Slice GetLengthPrefixedSlice(const char* data) {
   uint32_t len;
   const char* p = data;
   p = GetVarint32Ptr(p, p + 5, &len);  // +5: we assume "p" is not corrupted
-  return Slice(p, len);
+  return Slice(p, len);//经过GetVarint32Ptr方法，p指针已经发生变化
 }
 
 MemTable::MemTable(const InternalKeyComparator& cmp)
@@ -38,7 +38,7 @@ int MemTable::KeyComparator::operator()(const char* aptr, const char* bptr)
   // Internal keys are encoded as length-prefixed strings.
   Slice a = GetLengthPrefixedSlice(aptr);
   Slice b = GetLengthPrefixedSlice(bptr); //返回值是InternalKey对象生成的数据
-  return comparator.Compare(a, b);
+  return comparator.Compare(a, b);// InternalKeyComparator::Compare  db/dbformat.cc
 }
 
 // Encode a suitable internal key target for "target" and return it.
