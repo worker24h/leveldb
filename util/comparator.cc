@@ -23,7 +23,7 @@ class BytewiseComparatorImpl : public Comparator {
   }
 
   virtual int Compare(const Slice& a, const Slice& b) const {
-    return a.compare(b);
+    return a.compare(b);// leveldb/slice.h
   }
 
   virtual void FindShortestSeparator(

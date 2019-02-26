@@ -261,7 +261,7 @@ class Repairer {
     std::string fname = TableFileName(dbname_, number);
     Status status = env_->GetFileSize(fname, &t.meta.file_size);
     if (!status.ok()) {
-      // Try alternate file name.
+      // Try alternate file name. 兼容 1.13版本(含)之前 后缀名是.sst
       fname = SSTTableFileName(dbname_, number);
       Status s2 = env_->GetFileSize(fname, &t.meta.file_size);
       if (s2.ok()) {

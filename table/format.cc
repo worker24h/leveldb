@@ -29,6 +29,10 @@ Status BlockHandle::DecodeFrom(Slice* input) {
   }
 }
 
+/**
+ * footer格式化
+ * @param dst 存储
+ */
 void Footer::EncodeTo(std::string* dst) const {
   const size_t original_size = dst->size();
   metaindex_handle_.EncodeTo(dst);
@@ -49,7 +53,7 @@ Status Footer::DecodeFrom(Slice* input) {
   if (magic != kTableMagicNumber) {
     return Status::Corruption("not an sstable (bad magic number)");
   }
-
+  // 解析出metaindex data_index
   Status result = metaindex_handle_.DecodeFrom(input);
   if (result.ok()) {
     result = index_handle_.DecodeFrom(input);
@@ -62,6 +66,13 @@ Status Footer::DecodeFrom(Slice* input) {
   return result;
 }
 
+/**
+ * 从ldb文件中读取block
+ * @param file 文件
+ * @param options 选项
+ * @param handle 读取handle
+ * @param result 保存读取内容 输出参数
+ */
 Status ReadBlock(RandomAccessFile* file,
                  const ReadOptions& options,
                  const BlockHandle& handle,
@@ -97,6 +108,7 @@ Status ReadBlock(RandomAccessFile* file,
     }
   }
 
+  // data[n]压缩类型
   switch (data[n]) {
     case kNoCompression:
       if (data != buf) {

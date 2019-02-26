@@ -119,10 +119,13 @@ void MemTable::Add(SequenceNumber s, ValueType type,
   table_.Insert(buf);
 }
 
+/**
+ * 查询接口
+ */
 bool MemTable::Get(const LookupKey& key, std::string* value, Status* s) {
   Slice memkey = key.memtable_key();
   Table::Iterator iter(&table_);
-  iter.Seek(memkey.data());
+  iter.Seek(memkey.data());// 查找 ./db/skiplist.h
   if (iter.Valid()) {
     // entry format is:
     //    klength  varint32
@@ -133,12 +136,15 @@ bool MemTable::Get(const LookupKey& key, std::string* value, Status* s) {
     // Check that it belongs to same user key.  We do not check the
     // sequence number since the Seek() call above should have skipped
     // all entries with overly large sequence numbers.
+
+    // 由于查询过程中比较的key是按照InternalKey进行比较的，一般不会相等 这里按照
+    // user-key再次进行比较
     const char* entry = iter.key();
     uint32_t key_length;
     const char* key_ptr = GetVarint32Ptr(entry, entry+5, &key_length);
     if (comparator_.comparator.user_comparator()->Compare(
             Slice(key_ptr, key_length - 8),
-            key.user_key()) == 0) {
+            key.user_key()) == 0) {// util/comparator.cc
       // Correct user key
       const uint64_t tag = DecodeFixed64(key_ptr + key_length - 8);
       switch (static_cast<ValueType>(tag & 0xff)) {

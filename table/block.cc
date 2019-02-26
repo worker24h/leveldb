@@ -29,10 +29,10 @@ Block::Block(const BlockContents& contents)
   } else {
     size_t max_restarts_allowed = (size_-sizeof(uint32_t)) / sizeof(uint32_t);
     if (NumRestarts() > max_restarts_allowed) {
-      // The size is too small for NumRestarts()
+      // The size is too small for NumRestarts()  NumRestarts()用于获得重启点数
       size_ = 0;
     } else {
-      restart_offset_ = size_ - (1 + NumRestarts()) * sizeof(uint32_t);
+      restart_offset_ = size_ - (1 + NumRestarts()) * sizeof(uint32_t);//重启点偏移量
     }
   }
 }

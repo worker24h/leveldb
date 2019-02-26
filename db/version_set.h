@@ -66,6 +66,7 @@ class Version {
   // Lookup the value for key.  If found, store it in *val and
   // return OK.  Else return a non-OK status.  Fills *stats.
   // REQUIRES: lock is not held
+  // 用于查询 当找到key值后会对其进行赋值
   struct GetStats {
     FileMetaData* seek_file;
     int seek_file_level;
@@ -134,7 +135,7 @@ class Version {
   Version* prev_;               // Previous version in linked list
   int refs_;                    // Number of live refs to this version
 
-  // List of files per level
+  // List of files per level 保存每一层文件元数据
   std::vector<FileMetaData*> files_[config::kNumLevels];
 
   // Next file to compact based on seek stats.

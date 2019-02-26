@@ -40,7 +40,7 @@ class BlockHandle {
 
  private:
   uint64_t offset_;
-  uint64_t size_;
+  uint64_t size_; /* Block内容大小 不包含type、crc 可参考方法ReadBlock */
 };
 
 // Footer encapsulates the fixed information stored at the tail

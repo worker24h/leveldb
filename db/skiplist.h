@@ -263,7 +263,7 @@ template<typename Key, class Comparator>
 typename SkipList<Key,Comparator>::Node* SkipList<Key,Comparator>::FindGreaterOrEqual(const Key& key, Node** prev)
     const {
   Node* x = head_;
-  int level = GetMaxHeight() - 1;
+  int level = GetMaxHeight() - 1;//跳表层次
   while (true) {
     Node* next = x->Next(level);
     if (KeyIsAfterNode(key, next)) {//当前key值是否在next节点之后
@@ -274,7 +274,7 @@ typename SkipList<Key,Comparator>::Node* SkipList<Key,Comparator>::FindGreaterOr
       if (level == 0) {
         return next;
       } else {
-        // Switch to next list
+        // Switch to next list 跳表层次减小 进行遍历比较
         level--;
       }
     }

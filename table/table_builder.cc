@@ -157,6 +157,9 @@ void TableBuilder::Flush() {
   }
 }
 
+/**
+ * index_blcok 和 data_block都会调用该方法进行格式化处理
+ */
 void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
   // File format contains a sequence of blocks where each block has:
   //    block_data: uint8[n]

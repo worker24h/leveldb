@@ -35,13 +35,19 @@ TableCache::TableCache(const std::string& dbname,
     : env_(options->env),
       dbname_(dbname),
       options_(options),
-      cache_(NewLRUCache(entries)) {
+      cache_(NewLRUCache(entries)) {//LRUCache算法
 }
 
 TableCache::~TableCache() {
   delete cache_;
 }
 
+/**
+ * 查找Table
+ * @param file_number ldb文件编号  来自FileMetaData
+ * @param file_size   ldb文件大小  来自FileMetaData
+ * @param handle      cache handle对象 输出参数
+ */
 Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
                              Cache::Handle** handle) {
   Status s;
@@ -50,18 +56,18 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
   Slice key(buf, sizeof(buf));
   *handle = cache_->Lookup(key);
   if (*handle == NULL) {
-    std::string fname = TableFileName(dbname_, file_number);
+    std::string fname = TableFileName(dbname_, file_number);//读取ldb文件
     RandomAccessFile* file = NULL;
     Table* table = NULL;
     s = env_->NewRandomAccessFile(fname, &file);
-    if (!s.ok()) {
+    if (!s.ok()) {// 兼容 1.13版本(含)之前是sst文件作为后缀
       std::string old_fname = SSTTableFileName(dbname_, file_number);
       if (env_->NewRandomAccessFile(old_fname, &file).ok()) {
         s = Status::OK();
       }
     }
     if (s.ok()) {
-      s = Table::Open(*options_, file, file_size, &table);
+      s = Table::Open(*options_, file, file_size, &table);//创建table对象
     }
 
     if (!s.ok()) {
@@ -72,8 +78,8 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
     } else {
       TableAndFile* tf = new TableAndFile;
       tf->file = file;
-      tf->table = table;
-      *handle = cache_->Insert(key, tf, 1, &DeleteEntry);
+      tf->table = table;//保存table对象
+      *handle = cache_->Insert(key, tf, 1, &DeleteEntry);//插入cache中 默认返回LRUHandle对象
     }
   }
   return s;
@@ -101,7 +107,15 @@ Iterator* TableCache::NewIterator(const ReadOptions& options,
   }
   return result;
 }
-
+/**
+ * 从ldb中获取数据
+ * @param options 选项
+ * @param file_number ldb文件编号  来自FileMetaData
+ * @param file_size   ldb文件大小  来自FileMetaData
+ * @param k           查找key值
+ * @param arg         回调函数参数
+ * @param saver       回调函数
+ */
 Status TableCache::Get(const ReadOptions& options,
                        uint64_t file_number,
                        uint64_t file_size,

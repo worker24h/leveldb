@@ -50,7 +50,7 @@ class InternalKey;
 // data structures.
 enum ValueType {
   kTypeDeletion = 0x0,
-  kTypeValue = 0x1
+  kTypeValue = 0x1 //查找也是用这个类型
 };
 // kValueTypeForSeek defines the ValueType that should be passed when
 // constructing a ParsedInternalKey object for seeking to a particular
@@ -58,7 +58,7 @@ enum ValueType {
 // and the value type is embedded as the low 8 bits in the sequence
 // number in internal keys, we need to use the highest-numbered
 // ValueType, not the lowest).
-static const ValueType kValueTypeForSeek = kTypeValue;
+static const ValueType kValueTypeForSeek = kTypeValue; //代表查找
 
 typedef uint64_t SequenceNumber;
 

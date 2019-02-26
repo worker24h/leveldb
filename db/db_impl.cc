@@ -138,8 +138,10 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
   has_imm_.Release_Store(NULL);
 
   // Reserve ten files or so for other uses and give the rest to TableCache.
+  // 查找时才会存储到cache中 方便以后在查找 使用LRU算法 局部性原理
   const int table_cache_size = options_.max_open_files - kNumNonTableCacheFiles;
   table_cache_ = new TableCache(dbname_, &options_, table_cache_size);
+  
   // 创建VersionSet集合对象
   versions_ = new VersionSet(dbname_, &options_, table_cache_,
                              &internal_comparator_);
@@ -1270,7 +1272,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   if (status.ok() && my_batch != NULL) {  // NULL batch is for compactions 将多个writebatch进行打包处理
     WriteBatch* updates = BuildBatchGroup(&last_writer);
     WriteBatchInternal::SetSequence(updates, last_sequence + 1);
-    last_sequence += WriteBatchInternal::Count(updates); //保存下一个批任务的起始序号
+    last_sequence += WriteBatchInternal::Count(updates); //下一个批任务的起始序号为last_sequence+1
 
     // Add to log and apply to memtable.  We can release the lock
     // during this phase since &w is currently responsible for logging

@@ -18,7 +18,7 @@ Cache::~Cache() {
 
 namespace {
 
-// LRU cache implementation
+// LRU(最近最少使用 局部性原理) cache implementation
 //
 // Cache entries have an "in_cache" boolean indicating whether the cache has a
 // reference on the entry.  The only ways that this can become false without the

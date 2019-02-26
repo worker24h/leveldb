@@ -14,19 +14,25 @@ namespace leveldb {
 
 class VersionSet;
 
-// 每次从MemTable转成文件时候 就会创建该结构体
+/**
+ * 文件元数据 
+ * 每次从MemTable转成ldb文件时候 就会创建该结构体
+ */
 struct FileMetaData {
   int refs;
   // 当seek此处达到allowed_seeks就会触发一次压缩
   int allowed_seeks;          // Seeks allowed until compaction 
   
+  // 对应的文件编号
   // number取值是从DBImpl对象中versions_->NewFileNumber();
   // 参考方法WriteLevel0Table
   uint64_t number;
 
-  uint64_t file_size;         // File size in bytes
-  InternalKey smallest;       // Smallest internal key served by table 保存最小的InternalKey
-  InternalKey largest;        // Largest internal key served by table  保存最大的InternalKey
+  uint64_t file_size;         // File size in bytes. ldb文件大小
+
+  //当前文件保存的最小/最大InternalKey 用于查找
+  InternalKey smallest;       // Smallest internal key served by table
+  InternalKey largest;        // Largest internal key served by table
 
   FileMetaData() : refs(0), allowed_seeks(1 << 30), file_size(0) { }
 };

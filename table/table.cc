@@ -34,7 +34,13 @@ struct Table::Rep {
   BlockHandle metaindex_handle;  // Handle to metaindex_block: saved from footer
   Block* index_block;
 };
-
+/**
+ * 初始化Table
+ * @param options 选项
+ * @param file_number ldb文件编号  来自FileMetaData
+ * @param file_size   ldb文件大小  来自FileMetaData
+ * @param table table对象
+ */
 Status Table::Open(const Options& options,
                    RandomAccessFile* file,
                    uint64_t size,
@@ -43,13 +49,13 @@ Status Table::Open(const Options& options,
   if (size < Footer::kEncodedLength) {
     return Status::Corruption("file is too short to be an sstable");
   }
-
+  // footer始终是48字节 先读取footer
   char footer_space[Footer::kEncodedLength];
   Slice footer_input;
   Status s = file->Read(size - Footer::kEncodedLength, Footer::kEncodedLength,
                         &footer_input, footer_space);
   if (!s.ok()) return s;
-
+  // 解码 footer
   Footer footer;
   s = footer.DecodeFrom(&footer_input);
   if (!s.ok()) return s;
@@ -80,7 +86,7 @@ Status Table::Open(const Options& options,
     rep->filter_data = NULL;
     rep->filter = NULL;
     *table = new Table(rep);
-    (*table)->ReadMeta(footer);
+    (*table)->ReadMeta(footer);//读取Meta Index Block
   } else {
     delete index_block;
   }
@@ -223,12 +229,16 @@ Iterator* Table::NewIterator(const ReadOptions& options) const {
       &Table::BlockReader, const_cast<Table*>(this), options);
 }
 
+/**
+ * 
+ *
+ */
 Status Table::InternalGet(const ReadOptions& options, const Slice& k,
                           void* arg,
                           void (*saver)(void*, const Slice&, const Slice&)) {
   Status s;
   Iterator* iiter = rep_->index_block->NewIterator(rep_->options.comparator);
-  iiter->Seek(k);
+  iiter->Seek(k);//查找
   if (iiter->Valid()) {
     Slice handle_value = iiter->value();
     FilterBlockReader* filter = rep_->filter;

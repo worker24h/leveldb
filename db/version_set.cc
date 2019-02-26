@@ -94,6 +94,13 @@ Version::~Version() {
   }
 }
 
+/**
+ * 按照最大值 进行二分查找
+ * @param icmp 比较器
+ * @param files 待查找的文件
+ * @param key 查询key值
+ * @return 返回文件索引
+ */
 int FindFile(const InternalKeyComparator& icmp,
              const std::vector<FileMetaData*>& files,
              const Slice& key) {
@@ -102,7 +109,7 @@ int FindFile(const InternalKeyComparator& icmp,
   while (left < right) {
     uint32_t mid = (left + right) / 2;
     const FileMetaData* f = files[mid];
-    if (icmp.InternalKeyComparator::Compare(f->largest.Encode(), key) < 0) {
+    if (icmp.InternalKeyComparator::Compare(f->largest.Encode(), key) < 0) {//不在这个文件中
       // Key at "mid.largest" is < "target".  Therefore all
       // files at or before "mid" are uninteresting.
       left = mid + 1;
@@ -276,6 +283,7 @@ struct Saver {
   std::string* value;
 };
 }
+
 static void SaveValue(void* arg, const Slice& ikey, const Slice& v) {
   Saver* s = reinterpret_cast<Saver*>(arg);
   ParsedInternalKey parsed_key;
@@ -340,13 +348,20 @@ void Version::ForEachOverlapping(Slice user_key, Slice internal_key,
   }
 }
 
+/**
+ * 进入此方法 说明在memtable中没有找到 因此需要在文件中查找
+ * @param options 查询流程选项
+ * @param k 查询关键字
+ * @param value 查询value 输出参数
+ * @param 查询结果 输出参数
+ */
 Status Version::Get(const ReadOptions& options,
                     const LookupKey& k,
                     std::string* value,
                     GetStats* stats) {
   Slice ikey = k.internal_key();
   Slice user_key = k.user_key();
-  const Comparator* ucmp = vset_->icmp_.user_comparator();
+  const Comparator* ucmp = vset_->icmp_.user_comparator();// 比较器
   Status s;
 
   stats->seek_file = NULL;
@@ -359,13 +374,13 @@ Status Version::Get(const ReadOptions& options,
   // in an smaller level, later levels are irrelevant.
   std::vector<FileMetaData*> tmp;
   FileMetaData* tmp2;
-  for (int level = 0; level < config::kNumLevels; level++) {
+  for (int level = 0; level < config::kNumLevels; level++) {// 循环遍历每一层文件
     size_t num_files = files_[level].size();
     if (num_files == 0) continue;
 
     // Get the list of files to search in this level
     FileMetaData* const* files = &files_[level][0];
-    if (level == 0) {
+    if (level == 0) {// level0文件中 key是有重叠的
       // Level-0 files may overlap each other.  Find all files that
       // overlap user_key and process them in order from newest to oldest.
       tmp.reserve(num_files);
@@ -376,30 +391,32 @@ Status Version::Get(const ReadOptions& options,
           tmp.push_back(f);
         }
       }
-      if (tmp.empty()) continue;
-
+      if (tmp.empty()) continue;//说明key不存在当前level中所有文件
+      // 
       std::sort(tmp.begin(), tmp.end(), NewestFirst);
       files = &tmp[0];
       num_files = tmp.size();
     } else {
       // Binary search to find earliest index whose largest key >= ikey.
       uint32_t index = FindFile(vset_->icmp_, files_[level], ikey);
-      if (index >= num_files) {
+      if (index >= num_files) {//表示没有找到
         files = NULL;
         num_files = 0;
-      } else {
+      } else {//当前文件中最大值比key要大 因此只能说明待查找的key可能存在当前文件中 
         tmp2 = files[index];
         if (ucmp->Compare(user_key, tmp2->smallest.user_key()) < 0) {
           // All of "tmp2" is past any data for user_key
+          // 要查找的key 比当前文件中最小的key 还要小 说明不在此文件中
           files = NULL;
           num_files = 0;
-        } else {
+        } else {// 待查找key 都已经满足文件最大值和最小值  但是此时仍然不能确定是否存在
           files = &tmp2;
           num_files = 1;
         }
       }
     }
 
+    //num_files已经重新赋值 当num_files不为0 只能说明待查找key可能存在文件中 需要进一步对比
     for (uint32_t i = 0; i < num_files; ++i) {
       if (last_file_read != NULL && stats->seek_file == NULL) {
         // We have had more than one seek for this read.  Charge the 1st file.
@@ -418,14 +435,14 @@ Status Version::Get(const ReadOptions& options,
       saver.value = value;
       s = vset_->table_cache_->Get(options, f->number, f->file_size,
                                    ikey, &saver, SaveValue);
-      if (!s.ok()) {
+      if (!s.ok()) {//异常
         return s;
       }
       switch (saver.state) {
         case kNotFound:
-          break;      // Keep searching in other files
+          break;      // Keep searching in other files 没有找到继续查找
         case kFound:
-          return s;
+          return s;//找到直接返回
         case kDeleted:
           s = Status::NotFound(Slice());  // Use empty error message for speed
           return s;
@@ -819,6 +836,13 @@ class VersionSet::Builder {
   }
 };
 
+/**
+ * VersionSet构造方法 在DBImpl构造方法中调用
+ * @param dbname 数据库所在目录
+ * @param options 选项
+ * @param table_cache table_cache
+ * @param cmp 比较器
+ */
 VersionSet::VersionSet(const std::string& dbname,
                        const Options* options,
                        TableCache* table_cache,
