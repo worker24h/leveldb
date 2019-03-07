@@ -39,7 +39,7 @@ class BlockHandle {
   enum { kMaxEncodedLength = 10 + 10 };
 
  private:
-  uint64_t offset_;
+  uint64_t offset_; /* Block在文件中偏移量  block起始位置 */
   uint64_t size_; /* Block内容大小 不包含type、crc 可参考方法ReadBlock */
 };
 

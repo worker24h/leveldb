@@ -76,13 +76,13 @@ static inline const char* DecodeEntry(const char* p, const char* limit,
 class Block::Iter : public Iterator {
  private:
   const Comparator* const comparator_;
-  const char* const data_;      // underlying block contents
-  uint32_t const restarts_;     // Offset of restart array (list of fixed32)
-  uint32_t const num_restarts_; // Number of uint32_t entries in restart array
+  const char* const data_;      // underlying block contents 表示block数据起始位置
+  uint32_t const restarts_;     // Offset of restart array (list of fixed32) 重启点数组开始的位置 相对于data_
+  uint32_t const num_restarts_; // Number of uint32_t entries in restart array 重启点数组元素个数 即重启点有多少个
 
   // current_ is offset in data_ of current entry.  >= restarts_ if !Valid
   uint32_t current_;
-  uint32_t restart_index_;  // Index of restart block in which current_ falls
+  uint32_t restart_index_;  // Index of restart block in which current_ falls  表示当前重启点在重启点数组中索引位置
   std::string key_;
   Slice value_;
   Status status_;
@@ -108,7 +108,7 @@ class Block::Iter : public Iterator {
 
     // ParseNextKey() starts at the end of value_, so set value_ accordingly
     uint32_t offset = GetRestartPoint(index);
-    value_ = Slice(data_ + offset, 0);
+    value_ = Slice(data_ + offset, 0);//指向重启点数据第一条entry 注意这里是0
   }
 
  public:
@@ -167,18 +167,18 @@ class Block::Iter : public Iterator {
     // with a key < target
     uint32_t left = 0;
     uint32_t right = num_restarts_ - 1;
-    while (left < right) {
+    while (left < right) {// 二分查找
       uint32_t mid = (left + right + 1) / 2;
-      uint32_t region_offset = GetRestartPoint(mid);
+      uint32_t region_offset = GetRestartPoint(mid);//获取重启点 偏移量
       uint32_t shared, non_shared, value_length;
       const char* key_ptr = DecodeEntry(data_ + region_offset,
                                         data_ + restarts_,
                                         &shared, &non_shared, &value_length);
-      if (key_ptr == NULL || (shared != 0)) {
+      if (key_ptr == NULL || (shared != 0)) {//重启点 指向的entry  shared始终为0
         CorruptionError();
         return;
       }
-      Slice mid_key(key_ptr, non_shared);
+      Slice mid_key(key_ptr, non_shared);//重启点指向的第一个Entry的shared始终为0 因此mid_key就是完整的key
       if (Compare(mid_key, target) < 0) {
         // Key at "mid" is smaller than "target".  Therefore all
         // blocks before "mid" are uninteresting.
@@ -191,12 +191,12 @@ class Block::Iter : public Iterator {
     }
 
     // Linear search (within restart block) for first key >= target
-    SeekToRestartPoint(left);
+    SeekToRestartPoint(left);//重新定位到重启点 在组数据中进行查找
     while (true) {
       if (!ParseNextKey()) {
         return;
       }
-      if (Compare(key_, target) >= 0) {
+      if (Compare(key_, target) >= 0) {//只能表示key_包含target
         return;
       }
     }
@@ -225,8 +225,8 @@ class Block::Iter : public Iterator {
 
   bool ParseNextKey() {
     current_ = NextEntryOffset();
-    const char* p = data_ + current_;
-    const char* limit = data_ + restarts_;  // Restarts come right after data
+    const char* p = data_ + current_;//data_ 指向block起始位置
+    const char* limit = data_ + restarts_;  // Restarts come right after data 有效数据截止位置
     if (p >= limit) {
       // No more entries to return.  Mark as invalid.
       current_ = restarts_;
@@ -240,7 +240,7 @@ class Block::Iter : public Iterator {
     if (p == NULL || key_.size() < shared) {
       CorruptionError();
       return false;
-    } else {
+    } else {//谨记: 第一条entry中 shared = 0 non_shared=key的长度
       key_.resize(shared);
       key_.append(p, non_shared);
       value_ = Slice(p + non_shared, value_length);

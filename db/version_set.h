@@ -56,6 +56,10 @@ extern bool SomeFileOverlapsRange(
     const Slice* smallest_user_key,
     const Slice* largest_user_key);
 
+/**
+ * 在查找key, 若mem table不存在就需要查找ldb文件,那么多ldb文件应该查找哪个文件呢?
+ * 这就需要有一个key值映射表 key值映射表存在Version类中
+ */
 class Version {
  public:
   // Append to *iters a sequence of iterators that will
@@ -135,18 +139,21 @@ class Version {
   Version* prev_;               // Previous version in linked list
   int refs_;                    // Number of live refs to this version
 
-  // List of files per level 保存每一层文件元数据
+  // List of files per level
+  // 保存每一层文件元数据 主要保存是每层的ldb文件元数据
+  //    例如该文件保存的最小key和最大key 为了查找
   std::vector<FileMetaData*> files_[config::kNumLevels];
 
-  // Next file to compact based on seek stats.
+  // Next file to compact based on seek stats.  它们两个是一组 具体使用可参考压缩流程 PickCompaction
   FileMetaData* file_to_compact_;
   int file_to_compact_level_;
 
   // Level that should be compacted next and its compaction score.
   // Score < 1 means compaction is not strictly needed.  These fields
-  // are initialized by Finalize().
+  // are initialized by Finalize().  它们两个是一组 具体使用可参考压缩流程 PickCompaction
   double compaction_score_;
   int compaction_level_;
+  
   // 私有 构造函数
   explicit Version(VersionSet* vset)
       : vset_(vset), next_(this), prev_(this), refs_(0),
@@ -309,7 +316,12 @@ class VersionSet {
   // Opened lazily 
   WritableFile* descriptor_file_;
   log::Writer* descriptor_log_;
-  
+
+  /**
+   * 注意current_保存始终是最新数据版本信息 
+   * 在查找key, 若mem table不存在就需要查找ldb文件,那么多ldb文件 应该查找哪个呢?
+   * 这就需要有一个key值映射表 key值映射表存在Version类中
+   */
   Version dummy_versions_;  // Head of circular doubly-linked list of versions.
   Version* current_;        // == dummy_versions_.prev_ 始终指向链表最后一个
 
@@ -377,6 +389,7 @@ class Compaction {
   VersionEdit edit_;
 
   // Each compaction reads inputs from "level_" and "level_+1"
+  // 将低层次文件 压缩合并到 高层次 所以这里的数组是2
   std::vector<FileMetaData*> inputs_[2];      // The two sets of inputs
 
   // State used to check for number of of overlapping grandparent files

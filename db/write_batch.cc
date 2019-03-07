@@ -63,14 +63,14 @@ Status WriteBatch::Iterate(Handler* handler) const {
       case kTypeValue://添加操作
         if (GetLengthPrefixedSlice(&input, &key) &&
             GetLengthPrefixedSlice(&input, &value)) {
-          handler->Put(key, value);
+          handler->Put(key, value);// MemTableInserter
         } else {
           return Status::Corruption("bad WriteBatch Put");
         }
         break;
       case kTypeDeletion://删除操作
         if (GetLengthPrefixedSlice(&input, &key)) {
-          handler->Delete(key);
+          handler->Delete(key);//这里key为user-key
         } else {
           return Status::Corruption("bad WriteBatch Delete");
         }
@@ -159,6 +159,7 @@ class MemTableInserter : public WriteBatch::Handler {
 
 Status WriteBatchInternal::InsertInto(const WriteBatch* b,
                                       MemTable* memtable) {
+  //初始化 Handler 
   MemTableInserter inserter;
   inserter.sequence_ = WriteBatchInternal::Sequence(b);//获取序号
   inserter.mem_ = memtable;

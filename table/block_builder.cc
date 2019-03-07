@@ -92,7 +92,7 @@ void BlockBuilder::Add(const Slice& key, const Slice& value) {
       shared++;//确定两个key 相同前缀的部分
     }
   } else {
-    // 为了迅速查找key 每16条key-value就进行一次统计 实际记录偏移
+    // 为了迅速查找key 每16条key-value就进行一次统计 实际记录偏移 也可以理解成下一组数据的开始位置
     restarts_.push_back(buffer_.size());
     counter_ = 0;
   }

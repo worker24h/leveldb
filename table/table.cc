@@ -27,7 +27,7 @@ struct Table::Rep {
   Options options;
   Status status;
   RandomAccessFile* file;
-  uint64_t cache_id;
+  uint64_t cache_id; /* cache id */
   FilterBlockReader* filter;
   const char* filter_data;
 
@@ -177,7 +177,7 @@ Iterator* Table::BlockReader(void* arg,
 
   BlockHandle handle;
   Slice input = index_value;
-  Status s = handle.DecodeFrom(&input);
+  Status s = handle.DecodeFrom(&input);// 解析block handle
   // We intentionally allow extra stuff in index_value so that we
   // can add more features in the future.
 
@@ -230,15 +230,18 @@ Iterator* Table::NewIterator(const ReadOptions& options) const {
 }
 
 /**
- * 
- *
+ * 在table cache中查找k 
+ * @param options 选项
+ * @param k 待查找key
+ * @param arg 回调函数参数
+ * @param saver 回调函数
  */
 Status Table::InternalGet(const ReadOptions& options, const Slice& k,
                           void* arg,
                           void (*saver)(void*, const Slice&, const Slice&)) {
   Status s;
-  Iterator* iiter = rep_->index_block->NewIterator(rep_->options.comparator);
-  iiter->Seek(k);//查找
+  Iterator* iiter = rep_->index_block->NewIterator(rep_->options.comparator);//这里index_block类型是Block
+  iiter->Seek(k);//查找 在索引块中查找 Block.cc
   if (iiter->Valid()) {
     Slice handle_value = iiter->value();
     FilterBlockReader* filter = rep_->filter;
@@ -247,16 +250,17 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k,
         handle.DecodeFrom(&handle_value).ok() &&
         !filter->KeyMayMatch(handle.offset(), k)) {
       // Not found
-    } else {
+    } else {//在数据块中进行查找 iiter->value存储的是BlockHandle
       Iterator* block_iter = BlockReader(this, options, iiter->value());
       block_iter->Seek(k);
-      if (block_iter->Valid()) {
+      if (block_iter->Valid()) {//表示找到
         (*saver)(arg, block_iter->key(), block_iter->value());
       }
       s = block_iter->status();
       delete block_iter;
     }
   }
+  
   if (s.ok()) {
     s = iiter->status();
   }

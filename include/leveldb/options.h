@@ -94,7 +94,7 @@ struct Options {
 
   // If non-NULL, use the specified cache for blocks.
   // If NULL, leveldb will automatically create and use an 8MB internal cache.
-  // Default: NULL
+  // Default: NULL  如果为NULL leveldb会提供一个默认大小为8MB的cache 基于LRU算法
   Cache* block_cache;
 
   // Approximate size of user data packed per block.  Note that the

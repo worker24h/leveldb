@@ -35,7 +35,7 @@ TableCache::TableCache(const std::string& dbname,
     : env_(options->env),
       dbname_(dbname),
       options_(options),
-      cache_(NewLRUCache(entries)) {//LRUCache算法
+      cache_(NewLRUCache(entries)) {//LRUCache算法 默认990
 }
 
 TableCache::~TableCache() {
@@ -67,7 +67,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
       }
     }
     if (s.ok()) {
-      s = Table::Open(*options_, file, file_size, &table);//创建table对象
+      s = Table::Open(*options_, file, file_size, &table);//打开文件 创建table对象
     }
 
     if (!s.ok()) {
@@ -79,7 +79,9 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
       TableAndFile* tf = new TableAndFile;
       tf->file = file;
       tf->table = table;//保存table对象
-      *handle = cache_->Insert(key, tf, 1, &DeleteEntry);//插入cache中 默认返回LRUHandle对象
+      
+      //插入cache中 默认返回LRUHandle对象 此处key是文件编号
+      *handle = cache_->Insert(key, tf, 1, &DeleteEntry);
     }
   }
   return s;
@@ -123,15 +125,18 @@ Status TableCache::Get(const ReadOptions& options,
                        void* arg,
                        void (*saver)(void*, const Slice&, const Slice&)) {
   Cache::Handle* handle = NULL;
-  Status s = FindTable(file_number, file_size, &handle);
+  Status s = FindTable(file_number, file_size, &handle);// 打开ldb文件并且读取出data index block以及meta index block
   if (s.ok()) {
     Table* t = reinterpret_cast<TableAndFile*>(cache_->Value(handle))->table;
-    s = t->InternalGet(options, k, arg, saver);
+    s = t->InternalGet(options, k, arg, saver);// 在table中查找k 如果找到则通过saver回调函数进行保存
     cache_->Release(handle);
   }
   return s;
 }
 
+/**
+ * 从cache中删除指定文件的所有entry
+ */
 void TableCache::Evict(uint64_t file_number) {
   char buf[sizeof(file_number)];
   EncodeFixed64(buf, file_number);

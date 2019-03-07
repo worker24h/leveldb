@@ -14,6 +14,15 @@
 
 namespace leveldb {
 
+/**
+ * 创建ldb文件
+ * @param dbname 数据库根目录
+ * @param env    环境变量
+ * @param options  数据操作选项
+ * @param table_cache cache缓存
+ * @param iter  迭代器
+ * @param meta  文件元数据 -- 输出参数
+ */
 Status BuildTable(const std::string& dbname,
                   Env* env,
                   const Options& options,
@@ -34,10 +43,10 @@ Status BuildTable(const std::string& dbname,
     }
     // 迭代遍历 key-value 存储到TableBuilder对象中
     TableBuilder* builder = new TableBuilder(options, file);
-    meta->smallest.DecodeFrom(iter->key());
+    meta->smallest.DecodeFrom(iter->key());// 第一个key 一定是最小的
     for (; iter->Valid(); iter->Next()) {
       Slice key = iter->key();//这里的Key是InternalKey中rep_,并非用户数据中key
-      meta->largest.DecodeFrom(key);//因此key是有存储 所以遍历迭代保存最大key
+      meta->largest.DecodeFrom(key);//因此key是有序存储的所以遍历迭代保存最大key
       builder->Add(key, iter->value());//将key-value插入到TableBuilder中
     }
 

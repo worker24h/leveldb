@@ -101,7 +101,7 @@ Status TableBuilder::ChangeOptions(const Options& options) {
 
 /**
  * 添加key-value
- * @param key 关键字
+ * @param key 关键字 InternalKey
  * @param value 值
  */
 void TableBuilder::Add(const Slice& key, const Slice& value) {
