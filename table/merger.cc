@@ -20,7 +20,7 @@ class MergingIterator : public Iterator {
         current_(NULL),
         direction_(kForward) {
     for (int i = 0; i < n; i++) {
-      children_[i].Set(children[i]);
+      children_[i].Set(children[i]);//保存所有子迭代器
     }
   }
 
@@ -34,9 +34,9 @@ class MergingIterator : public Iterator {
 
   virtual void SeekToFirst() {
     for (int i = 0; i < n_; i++) {
-      children_[i].SeekToFirst();
+      children_[i].SeekToFirst();//每个迭代器都跳到第一个节点
     }
-    FindSmallest();
+    FindSmallest();//比较每个迭代器节点并设置最小的
     direction_ = kForward;
   }
 
@@ -142,18 +142,19 @@ class MergingIterator : public Iterator {
   const Comparator* comparator_;
   IteratorWrapper* children_;
   int n_;
-  IteratorWrapper* current_;
+  IteratorWrapper* current_;//保存即将使用的
 
   // Which direction is the iterator moving?
   enum Direction {
-    kForward,
-    kReverse
+    kForward,//正向
+    kReverse//反向
   };
   Direction direction_;
 };
 
 void MergingIterator::FindSmallest() {
   IteratorWrapper* smallest = NULL;
+  // 循环遍历 每个迭代器 确定最小的
   for (int i = 0; i < n_; i++) {
     IteratorWrapper* child = &children_[i];
     if (child->Valid()) {
@@ -169,6 +170,7 @@ void MergingIterator::FindSmallest() {
 
 void MergingIterator::FindLargest() {
   IteratorWrapper* largest = NULL;
+  // 循环遍历 每个迭代器 确定最大的
   for (int i = n_-1; i >= 0; i--) {
     IteratorWrapper* child = &children_[i];
     if (child->Valid()) {

@@ -692,6 +692,9 @@ void DBImpl::RecordBackgroundError(const Status& s) {
 }
 /**
  * 尝试调度压缩流程
+ * 压缩场景原因:
+ *     一种是某一层级的文件数过多或者文件总大小超过预定门限，
+ *    另一种是level n 和level n+1重叠严重，无效seek次数太多。(level n 和level n＋1的文件，key的范围可能交叉导致)
  */
 void DBImpl::MaybeScheduleCompaction() {
   mutex_.AssertHeld();
@@ -705,7 +708,7 @@ void DBImpl::MaybeScheduleCompaction() {
              manual_compaction_ == NULL &&
              !versions_->NeedsCompaction()) {
     // No work to be done
-  } else {//在imm_不空的前提下 才可能进行压缩
+  } else {
     bg_compaction_scheduled_ = true;
     env_->Schedule(&DBImpl::BGWork, this); //创建线程 执行压缩
   }
@@ -972,7 +975,8 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   // Release mutex while we're actually doing the compaction work
   mutex_.Unlock();
 
-  Iterator* input = versions_->MakeInputIterator(compact->compaction);//创建迭代器
+  //创建迭代器 这个创建迭代器的过程非常重要  为下面判断数据是否有效 起到至关重要的作用
+  Iterator* input = versions_->MakeInputIterator(compact->compaction);
   input->SeekToFirst();
   Status status;
   ParsedInternalKey ikey;
@@ -1010,6 +1014,12 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       has_current_user_key = false;
       last_sequence_for_key = kMaxSequenceNumber;
     } else {
+      /**
+       * 经过排序之后 相同的user key被放到迭代器 组织到一起了(相同user key放到一起)
+       * current_user_key 保存上次user key
+       * ikey.user_key是本次循环中 处理的user key
+       * 如果compare返回非0 表示这两个user key不一样
+       */
       if (!has_current_user_key ||
           user_comparator()->Compare(ikey.user_key,
                                      Slice(current_user_key)) != 0) {

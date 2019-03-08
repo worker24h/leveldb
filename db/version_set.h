@@ -144,13 +144,16 @@ class Version {
   //    例如该文件保存的最小key和最大key 为了查找
   std::vector<FileMetaData*> files_[config::kNumLevels];
 
-  // Next file to compact based on seek stats.  它们两个是一组 具体使用可参考压缩流程 PickCompaction
+  // 文件压缩分两种: 由于leveln和leveln+1中 key是可能重复的, 导致命中失败次数可能会
+  // 增加 所以需要进行压缩，file_to_compact_level_就是指定的要压缩层次
   FileMetaData* file_to_compact_;
   int file_to_compact_level_;
 
   // Level that should be compacted next and its compaction score.
   // Score < 1 means compaction is not strictly needed.  These fields
   // are initialized by Finalize().  它们两个是一组 具体使用可参考压缩流程 PickCompaction
+  // 文件压缩分两种: 由于文件个数、当前level中文件总大小超过门限值 需要进行压缩
+  // compaction_level_就是指定的要压缩层次  
   double compaction_score_;
   int compaction_level_;
   
