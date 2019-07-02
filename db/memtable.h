@@ -27,7 +27,7 @@ class MemTable {
   void Ref() { ++refs_; }
 
   // Drop reference count.  Delete if no more references exist.
-  void Unref() {
+  void Unref() {//引用计数器为0时表MemTable没有用了 要删除掉
     --refs_;
     assert(refs_ >= 0);
     if (refs_ <= 0) {
@@ -73,7 +73,7 @@ class MemTable {
 
   typedef SkipList<const char*, KeyComparator> Table;
 
-  KeyComparator comparator_;
+  KeyComparator comparator_; // 比较器
   int refs_;
   Arena arena_;
   Table table_; /* 跳表 Table类型重定义typedef */

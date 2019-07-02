@@ -697,7 +697,7 @@ class VersionSet::Builder {
     BySmallestKey cmp;
     cmp.internal_comparator = &vset_->icmp_;
     for (int level = 0; level < config::kNumLevels; level++) {
-      levels_[level].added_files = new FileSet(cmp);
+      levels_[level].added_files = new FileSet(cmp);//set对象 设置compare比较器
     }
   }
 
@@ -879,7 +879,7 @@ VersionSet::VersionSet(const std::string& dbname,
       options_(options),
       table_cache_(table_cache),
       icmp_(*cmp),
-      next_file_number_(2),
+      next_file_number_(2), // file identifier
       manifest_file_number_(0),  // Filled by Recover()
       last_sequence_(0),
       log_number_(0),
@@ -1008,7 +1008,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
 }
 
 /**
- * 恢复数据 从文件中读取出VersionEdit来初始化VersionSet
+ * 恢复数据 从MANIFEST文件中读取出VersionEdit来初始化VersionSet
  * @param save_manifest  输出参数 
  *          true  -  需要创建新的manifest文件
  *          false -  不需要创建新的manifest文件
@@ -1036,7 +1036,7 @@ Status VersionSet::Recover(bool *save_manifest) {
   //读取MANIFEST文件
   std::string dscname = dbname_ + "/" + current;
   SequentialFile* file;
-  s = env_->NewSequentialFile(dscname, &file);
+  s = env_->NewSequentialFile(dscname, &file);//env_posix.cc
   if (!s.ok()) {
     return s;
   }
@@ -1049,18 +1049,18 @@ Status VersionSet::Recover(bool *save_manifest) {
   uint64_t last_sequence = 0;
   uint64_t log_number = 0;
   uint64_t prev_log_number = 0;
-  // current_ 保存的当前已有的Version信息 后面会调用Builder saveto方法与current_
+  // current_ 保存的当前最新的Version信息 后面会调用Builder saveto方法与current_
   // 指定的Version信息进行合并
   Builder builder(this, current_); //Builder类定义在version_set.cc
 
   {
     LogReporter reporter;
     reporter.status = &s;
-    //创建读取执行器
+    //创建读取执行器 读取MANIFEST文件
     log::Reader reader(file, &reporter, true/*checksum*/, 0/*initial_offset*/);
     Slice record;
     std::string scratch;//在ReadRecord内部使用
-    // 读取出来的是VersionEdit对象
+    // 读取MAINIFEST文件 逐条读取反序列化VersionEdit对象
     while (reader.ReadRecord(&record, &scratch) && s.ok()) {//log_reader.cc
       VersionEdit edit;
       s = edit.DecodeFrom(record);//解码 到VersionEdit
@@ -1072,8 +1072,8 @@ Status VersionSet::Recover(bool *save_manifest) {
               icmp_.user_comparator()->Name());
         }
       }
-
-      if (s.ok()) {//将VersionEdit文件信息以及压缩点保存到builder中
+      //对于过期的VersionEdit对象中最有用的内容就是: 文件信息以及压缩点,所以需要对其进行整合
+      if (s.ok()) {
         builder.Apply(&edit);
       }
 
@@ -1124,8 +1124,9 @@ Status VersionSet::Recover(bool *save_manifest) {
     builder.SaveTo(v);
     
     // Install recovered version
-    Finalize(v);
-    AppendVersion(v);// 将version插入到VersionSet中
+    Finalize(v);//预计算压缩层次以及分数
+    AppendVersion(v);// 将version插入到Version双向链表尾部
+    // 设置VersionSet中的序号信息
     manifest_file_number_ = next_file;
     next_file_number_ = next_file + 1;
     last_sequence_ = last_sequence;

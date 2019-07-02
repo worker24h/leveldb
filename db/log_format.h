@@ -12,15 +12,15 @@ namespace leveldb {
 namespace log {
 
 enum RecordType {
-  // Zero is reserved for preallocated files
-  kZeroType = 0,
+    // Zero is reserved for preallocated files
+    kZeroType = 0,
 
-  kFullType = 1,
+    kFullType = 1, //表示当前Record没有超过32k
 
-  // For fragments
-  kFirstType = 2,
-  kMiddleType = 3,
-  kLastType = 4
+    // For fragments 表示当前Record超过了32k需要分片
+    kFirstType = 2,  // 第一个分片
+    kMiddleType = 3, // 中间分片
+    kLastType = 4    // 最后一个分片
 };
 static const int kMaxRecordType = kLastType;
 

@@ -57,20 +57,20 @@ Status WriteBatch::Iterate(Handler* handler) const {
   int found = 0;
   while (!input.empty()) {
     found++;
-    char tag = input[0]; // type
+    char tag = input[0]; // 获取type
     input.remove_prefix(1);
     switch (tag) {
       case kTypeValue://添加操作
         if (GetLengthPrefixedSlice(&input, &key) &&
             GetLengthPrefixedSlice(&input, &value)) {
-          handler->Put(key, value);// MemTableInserter
+          handler->Put(key, value);// MemTableInserter  此处的key value就是用输入的key和value
         } else {
           return Status::Corruption("bad WriteBatch Put");
         }
         break;
       case kTypeDeletion://删除操作
         if (GetLengthPrefixedSlice(&input, &key)) {
-          handler->Delete(key);//这里key为user-key
+          handler->Delete(key);//这里key为用户输入key
         } else {
           return Status::Corruption("bad WriteBatch Delete");
         }

@@ -189,7 +189,7 @@ Status DBImpl::NewDB() {
   // 创建MANIFEST文件
   const std::string manifest = DescriptorFileName(dbname_, 1);
   WritableFile* file;
-  Status s = env_->NewWritableFile(manifest, &file);
+  Status s = env_->NewWritableFile(manifest, &file);// util/env_posix.cc 调用fopen创建文件
   if (!s.ok()) {
     return s;
   }
@@ -207,7 +207,7 @@ Status DBImpl::NewDB() {
   delete file;
   if (s.ok()) {
     // Make "CURRENT" file that points to the new manifest file.
-    s = SetCurrentFile(env_, dbname_, 1);
+    s = SetCurrentFile(env_, dbname_, 1);//创建CURRENT文件指向最新的MANIFEST文件
   } else {
     env_->DeleteFile(manifest);
   }
@@ -318,7 +318,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
   }
   /**
    * 以上是数据文件校验 如果不存在则创建新的数据库文件  以下内容是从数据库文件 
-   * 中恢复数据,如版本信息
+   * 中恢复数据,如版本信息、MemTable
    */
   s = versions_->Recover(save_manifest);//version_set.cc 
   if (!s.ok()) {
@@ -377,7 +377,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
   }
 
   if (versions_->LastSequence() < max_sequence) {
-    versions_->SetLastSequence(max_sequence);
+    versions_->SetLastSequence(max_sequence);//保存最大记录号
   }
 
   return Status::OK();
@@ -1303,8 +1303,8 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   uint64_t last_sequence = versions_->LastSequence();//表示上次已经使用的序列号
   Writer* last_writer = &w;
   
-  if (status.ok() && my_batch != NULL) {  // NULL batch is for compactions 将多个writebatch进行打包处理
-    WriteBatch* updates = BuildBatchGroup(&last_writer);
+  if (status.ok() && my_batch != NULL) {  // NULL batch is for compactions
+    WriteBatch* updates = BuildBatchGroup(&last_writer);//将多个WriteBatch合并成一个WriteBatch
     WriteBatchInternal::SetSequence(updates, last_sequence + 1);
     last_sequence += WriteBatchInternal::Count(updates); //下一个批任务的起始序号为last_sequence+1
 
@@ -1341,7 +1341,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
 
     versions_->SetLastSequence(last_sequence);
   }
-
+  // 生产者消费者模式 通知生产者
   while (true) {
     Writer* ready = writers_.front();
     writers_.pop_front();
@@ -1380,7 +1380,7 @@ WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
   // original write is small, limit the growth so we do not slow
   // down the small write too much.
   // 避免每次写入过大
-  size_t max_size = 1 << 20;
+  size_t max_size = 1 << 20;//1M
   if (size <= (128<<10)) {
     max_size = size + (128<<10);
   }

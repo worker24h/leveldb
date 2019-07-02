@@ -32,12 +32,14 @@ size_t MemTable::ApproximateMemoryUsage() { return arena_.MemoryUsage(); }
 
 /**
  * 重载()运算符
+ * @param aptr InternalKey格式
+ * @param bptr InternalKey格式
  */
 int MemTable::KeyComparator::operator()(const char* aptr, const char* bptr)
     const {
   // Internal keys are encoded as length-prefixed strings.
   Slice a = GetLengthPrefixedSlice(aptr);
-  Slice b = GetLengthPrefixedSlice(bptr); //返回值是InternalKey对象生成的数据
+  Slice b = GetLengthPrefixedSlice(bptr); //返回值指向InternalKey对象中value部分
   return comparator.Compare(a, b);// InternalKeyComparator::Compare  db/dbformat.cc
 }
 
@@ -121,11 +123,14 @@ void MemTable::Add(SequenceNumber s, ValueType type,
 
 /**
  * 查询接口
+ * @param key 查询key封装了InternalKey
+ * @param value 输出参数 用户输入value
+ * @param s 保存状态 当未找到key时 设置为NotFound
  */
 bool MemTable::Get(const LookupKey& key, std::string* value, Status* s) {
   Slice memkey = key.memtable_key();
   Table::Iterator iter(&table_);
-  iter.Seek(memkey.data());// 查找 ./db/skiplist.h
+  iter.Seek(memkey.data());// memkey.data返回的是InternalKey 查找 ./db/skiplist.h
   if (iter.Valid()) {
     // entry format is:
     //    klength  varint32
@@ -137,14 +142,13 @@ bool MemTable::Get(const LookupKey& key, std::string* value, Status* s) {
     // sequence number since the Seek() call above should have skipped
     // all entries with overly large sequence numbers.
 
-    // 由于查询过程中比较的key是按照InternalKey进行比较的，一般不会相等 这里按照
-    // user-key再次进行比较
+    // 由于查询过程中比较的key是按照InternalKey进行比较的, 这里按照user-key再次进行比较
     const char* entry = iter.key();
     uint32_t key_length;
     const char* key_ptr = GetVarint32Ptr(entry, entry+5, &key_length);
     if (comparator_.comparator.user_comparator()->Compare(
             Slice(key_ptr, key_length - 8),
-            key.user_key()) == 0) {// util/comparator.cc
+            key.user_key()) == 0) {// 比较用户输入的key是否相等  比较函数util/comparator.cc
       // Correct user key
       const uint64_t tag = DecodeFixed64(key_ptr + key_length - 8);
       switch (static_cast<ValueType>(tag & 0xff)) {

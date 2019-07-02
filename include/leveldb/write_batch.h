@@ -65,21 +65,20 @@ class WriteBatch {
    *   |                        count                                  |
    *   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
    *   |                                                               |
-   *   ~                    key-value (不定长)                         ~
+   *   ~                    type-key-value (不定长)                     ~
    *   |                                                               |
    *   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
    *   |                                                               |
-   *   ~                    key-value (不定长)                         ~
+   *   ~                    type-key-value (不定长)                     ~
    *   |                                                               |
    *   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
    * 说明:
-   *   Sequnce number 序列号8字节
-   *   count          key-value对 有多少个
-   *   key-value格式说明:
-   *    1）type + key-size + key + value-size + value
-   *    2）type(1字节)取值: kTypeValue和kTypeDeletion
-   *    3）key-size、value-size 进行数字压缩存储(7bit有效数据)
-   *       key-size、key、value-size 、value是不定长
+   *   Sequnce number 序列号  8字节(按照小端序存储)
+   *   count          代表type-key-value有多少个  4字节(按照小端序存储)
+   *   type-key-value格式说明:
+   *    1）type(1字节)取值: kTypeDeletion(删除)和kTypeValue(插入)
+   *    2）key的存储: 先存储key-length再存储key实际内容,其中key-length进行7bit数字压缩出存储
+   *    3）valu的存储方式和key一样
    */
   std::string rep_;  // See comment in write_batch.cc for the format of rep_
 

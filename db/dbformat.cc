@@ -134,7 +134,7 @@ LookupKey::LookupKey(const Slice& user_key, SequenceNumber s) {
   kstart_ = dst;
   memcpy(dst, user_key.data(), usize);
   dst += usize;
-  EncodeFixed64(dst, PackSequenceAndType(s, kValueTypeForSeek));
+  EncodeFixed64(dst, PackSequenceAndType(s, kValueTypeForSeek));//指定类型为查找 kValueTypeForSeek
   dst += 8;
   end_ = dst;
 }
