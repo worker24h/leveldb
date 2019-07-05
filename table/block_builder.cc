@@ -42,13 +42,13 @@ BlockBuilder::BlockBuilder(const Options* options)
       counter_(0),
       finished_(false) {
   assert(options->block_restart_interval >= 1);
-  restarts_.push_back(0);       // First restart point is at offset 0
+  restarts_.push_back(0);       // First restart point is at offset 0 重启点至少有一个
 }
 
 void BlockBuilder::Reset() {
   buffer_.clear();
   restarts_.clear();
-  restarts_.push_back(0);       // First restart point is at offset 0
+  restarts_.push_back(0);       // First restart point is at offset 0 重启点至少有一个
   counter_ = 0;
   finished_ = false;
   last_key_.clear();
@@ -61,20 +61,23 @@ size_t BlockBuilder::CurrentSizeEstimate() const {
 }
 
 /**
- * 将重启点信息追加到buffer中
+ * 构造原始数据
+ * 主要将重启点信息追加到buffer中
  */
 Slice BlockBuilder::Finish() {
   // Append restart array
   for (size_t i = 0; i < restarts_.size(); i++) {
     PutFixed32(&buffer_, restarts_[i]);//重启点偏移
   }
-  PutFixed32(&buffer_, restarts_.size());//重启点个数
+  PutFixed32(&buffer_, restarts_.size());//重启点个数  重启点至少有一个参考构造函数
   finished_ = true;
   return Slice(buffer_);
 }
 
 /**
  * 向block中添加key和value
+ * @param key
+ * @param value
  * 当第一次添加key的时候 last_key_是空字符串 所以不会有相同前缀
  */
 void BlockBuilder::Add(const Slice& key, const Slice& value) {
@@ -84,7 +87,7 @@ void BlockBuilder::Add(const Slice& key, const Slice& value) {
   assert(buffer_.empty()
          || options_->comparator->Compare(key, last_key_piece) > 0);
 
-  size_t shared = 0;
+  size_t shared = 0;//表示两个key有多少个字符是共享的
   if (counter_ < options_->block_restart_interval) {
     // See how much sharing to do with previous string  确定key前缀
     const size_t min_length = std::min(last_key_piece.size(), key.size());
@@ -92,7 +95,7 @@ void BlockBuilder::Add(const Slice& key, const Slice& value) {
       shared++;//确定两个key 相同前缀的部分
     }
   } else {
-    // 为了迅速查找key 每16条key-value就进行一次统计 实际记录偏移 也可以理解成下一组数据的开始位置
+    // 为了迅速查找key 每16条key-value作为一个重启点 实际记录偏移 也可以理解成下一组数据的开始位置
     restarts_.push_back(buffer_.size());
     counter_ = 0;
   }

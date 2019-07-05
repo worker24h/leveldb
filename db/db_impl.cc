@@ -548,7 +548,7 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
 
   // Note that if file_size is zero, the file has been deleted and
   // should not be added to the manifest.
-  int level = 0;
+  int level = 0;//默认放到level0
   if (s.ok() && meta.file_size > 0) {
     /* 获取用户数据 key 非内部internal_key */
     const Slice min_user_key = meta.smallest.user_key();
@@ -563,7 +563,7 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
     if (base != NULL) {
       level = base->PickLevelForMemTableOutput(min_user_key, max_user_key);
     }
-    //保存metafiledata
+    //保存metafiledata 到了这里就确定了文件所属层次
     edit->AddFile(level, meta.number, meta.file_size,
                   meta.smallest, meta.largest);
   }
@@ -599,15 +599,15 @@ void DBImpl::CompactMemTable() {
   if (s.ok()) {
     edit.SetPrevLogNumber(0);
     edit.SetLogNumber(logfile_number_);  // Earlier logs no longer needed
-    s = versions_->LogAndApply(&edit, &mutex_);
+    s = versions_->LogAndApply(&edit, &mutex_);//更新到Manifest文件中
   }
 
-  if (s.ok()) {
+  if (s.ok()) {//释放Immutable Table内存
     // Commit to the new state
     imm_->Unref();
     imm_ = NULL;
     has_imm_.Release_Store(NULL);
-    DeleteObsoleteFiles();
+    DeleteObsoleteFiles();//删除残余文件
   } else {
     RecordBackgroundError(s);//后台压缩线程 遇到问题 发起通知
   }
@@ -693,7 +693,7 @@ void DBImpl::RecordBackgroundError(const Status& s) {
 /**
  * 尝试调度压缩流程
  * 压缩场景原因:
- *     一种是某一层级的文件数过多或者文件总大小超过预定门限，
+ *    一种是某一层级的文件数过多或者文件总大小超过预定门限，
  *    另一种是level n 和level n+1重叠严重，无效seek次数太多。(level n 和level n＋1的文件，key的范围可能交叉导致)
  */
 void DBImpl::MaybeScheduleCompaction() {
@@ -715,7 +715,7 @@ void DBImpl::MaybeScheduleCompaction() {
 }
 
 /**
- * 压缩线程 回调函数
+ * 压缩线程线程函数 回调函数
  */
 void DBImpl::BGWork(void* db) {
   reinterpret_cast<DBImpl*>(db)->BackgroundCall();
@@ -1187,6 +1187,9 @@ int64_t DBImpl::TEST_MaxNextLevelOverlappingBytes() {
 
 /**
  * 查询
+ * @param options 查询选项
+ * @param key 查询key
+ * @param value 输出参数 如果找到则赋值给value
  */
 Status DBImpl::Get(const ReadOptions& options,
                    const Slice& key,
@@ -1220,12 +1223,13 @@ Status DBImpl::Get(const ReadOptions& options,
     } else if (imm != NULL && imm->Get(lkey, value, &s)) {//查找immutable mem table
       // Done
     } else {
-      s = current->Get(options, lkey, value, &stats);//查找ldb文件 
+      // 查找ldb文件 最新的版本信息Version都保存在current中
+      s = current->Get(options, lkey, value, &stats);
       have_stat_update = true;
     }
     mutex_.Lock();
   }
-
+  //是否需要启动压缩流程
   if (have_stat_update && current->UpdateStats(stats)) {
     MaybeScheduleCompaction();
   }

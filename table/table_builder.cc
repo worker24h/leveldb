@@ -111,7 +111,8 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
   if (r->num_entries > 0) {
     assert(r->options.comparator->Compare(key, Slice(r->last_key)) > 0);//按照字符比较
   }
-
+  // write to index block if filter is exist
+  // pending_index_entry赋值在方法TableBuilder::Flush
   if (r->pending_index_entry) {//是否需要增加index_entry
     assert(r->data_block.empty());
     r->options.comparator->FindShortestSeparator(&r->last_key, key);
@@ -120,11 +121,11 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
     r->index_block.Add(r->last_key, Slice(handle_encoding));//讲解如何block信息存到index_block中
     r->pending_index_entry = false;
   }
-
+  // write to filter block if filter is exist
   if (r->filter_block != NULL) {
     r->filter_block->AddKey(key);
   }
-
+  // write to data block
   r->last_key.assign(key.data(), key.size());
   r->num_entries++;
   r->data_block.Add(key, value);//将key-value添加到data_block中
@@ -149,7 +150,7 @@ void TableBuilder::Flush() {
 
   if (ok()) {
     r->pending_index_entry = true;//创建新的index_block
-    r->status = r->file->Flush();
+    r->status = r->file->Flush();//刷新文件 真正写入磁盘
   }
   
   if (r->filter_block != NULL) {
@@ -167,7 +168,7 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
   //    crc: uint32
   assert(ok());
   Rep* r = rep_;
-  Slice raw = block->Finish();//data_block原始数据
+  Slice raw = block->Finish();//data_block原始数据 将重启点信息写入到raw中
 
   Slice block_contents;
   CompressionType type = r->options.compression;
@@ -195,7 +196,7 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
   //写入文件 并且重置block对象
   WriteRawBlock(block_contents, type, handle);
   r->compressed_output.clear();
-  block->Reset();
+  block->Reset();//清空相关统计信息
 }
 
 void TableBuilder::WriteRawBlock(const Slice& block_contents,
@@ -213,7 +214,7 @@ void TableBuilder::WriteRawBlock(const Slice& block_contents,
     EncodeFixed32(trailer+1, crc32c::Mask(crc));
     r->status = r->file->Append(Slice(trailer, kBlockTrailerSize));
     if (r->status.ok()) {
-      r->offset += block_contents.size() + kBlockTrailerSize;
+      r->offset += block_contents.size() + kBlockTrailerSize; //记录偏移量
     }
   }
 }

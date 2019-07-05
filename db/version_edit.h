@@ -111,7 +111,7 @@ class VersionEdit {
 
   std::vector< std::pair<int, InternalKey> > compact_pointers_;
   DeletedFileSet deleted_files_; //DeletedFileSet重定义了
-  std::vector< std::pair<int, FileMetaData> > new_files_;
+  std::vector< std::pair<int, FileMetaData> > new_files_; //std::pair中int代表level层次
 };
 
 }  // namespace leveldb

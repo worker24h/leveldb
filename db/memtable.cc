@@ -66,13 +66,13 @@ class MemTableIterator: public Iterator {
   virtual void SeekToLast() { iter_.SeekToLast(); }
   virtual void Next() { iter_.Next(); }
   virtual void Prev() { iter_.Prev(); }
-  virtual Slice key() const {
+  virtual Slice key() const {// 获取InternalKey
     // iter_.key()返回的是Slice结构 也就是整条数据, 该数据格式如下(可查看MemTable::Add方法):
     // [internal-key-size] + [key] + [seq|type] + [value-size] + [value]
     // GetLengthPrefixedSlice方法返回值是[key] + [seq|type]
     return GetLengthPrefixedSlice(iter_.key());  //SkipList.h key()
   }
-  virtual Slice value() const {
+  virtual Slice value() const {//获取Value
     Slice key_slice = GetLengthPrefixedSlice(iter_.key());
     return GetLengthPrefixedSlice(key_slice.data() + key_slice.size());
   }

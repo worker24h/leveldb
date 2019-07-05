@@ -140,8 +140,7 @@ class Version {
   int refs_;                    // Number of live refs to this version
 
   // List of files per level
-  // 保存每一层文件元数据 主要保存是每层的ldb文件元数据
-  //    例如该文件保存的最小key和最大key 为了查找
+  // files_保存每层文件元信息 一个文件对应一个FileMetaData
   std::vector<FileMetaData*> files_[config::kNumLevels];
 
   // 文件压缩分两种: 由于leveln和leveln+1中 key是可能重复的, 导致命中失败次数可能会

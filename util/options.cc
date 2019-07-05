@@ -20,8 +20,8 @@ Options::Options()
       max_open_files(1000),
       block_cache(NULL),
       block_size(4096),
-      block_restart_interval(16),
-      max_file_size(2<<20),
+      block_restart_interval(16), //重启点间隔为16
+      max_file_size(2<<20), //2M
       compression(kSnappyCompression),
       reuse_logs(false),
       filter_policy(NULL) {

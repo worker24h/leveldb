@@ -42,10 +42,10 @@ class BlockBuilder {
  private:
   const Options*        options_;
   std::string           buffer_;      // Destination buffer
-  std::vector<uint32_t> restarts_;    // Restart points
+  std::vector<uint32_t> restarts_;    // Restart points 每16个block-entry生成一个重启点 作用于block
   int                   counter_;     // Number of entries emitted since restart
   bool                  finished_;    // Has Finish() been called?
-  std::string           last_key_;
+  std::string           last_key_;    // 上次key前缀
 
   // No copying allowed
   BlockBuilder(const BlockBuilder&);

@@ -21,7 +21,7 @@
 namespace leveldb {
 
 static int TargetFileSize(const Options* options) {
-  return options->max_file_size;
+  return options->max_file_size;//默认2M
 }
 
 // Maximum bytes of overlaps in grandparent (i.e., level+2) before we
@@ -143,7 +143,7 @@ bool SomeFileOverlapsRange(
     const Slice* smallest_user_key,
     const Slice* largest_user_key) {
   const Comparator* ucmp = icmp.user_comparator();
-  if (!disjoint_sorted_files) {
+  if (!disjoint_sorted_files) {//进入这个分支表示 遍历level0中的文件
     // Need to check against all files
     for (size_t i = 0; i < files.size(); i++) {
       const FileMetaData* f = files[i];
@@ -545,7 +545,7 @@ bool Version::OverlapInLevel(int level,
 int Version::PickLevelForMemTableOutput(
     const Slice& smallest_user_key,
     const Slice& largest_user_key) {
-  int level = 0;
+  int level = 0; //默认存储到level0
 
   /* 如果和level0中key不重叠 则可能保存到更高层中 */
   if (!OverlapInLevel(0, &smallest_user_key, &largest_user_key)) {
@@ -555,13 +555,16 @@ int Version::PickLevelForMemTableOutput(
     InternalKey limit(largest_user_key, 0, static_cast<ValueType>(0));
     std::vector<FileMetaData*> overlaps;
     while (level < config::kMaxMemCompactLevel) {
+      //进入if分支 表示level层没有冲突 但是level+1层有冲突 则将文件保存在level层
       if (OverlapInLevel(level + 1, &smallest_user_key, &largest_user_key)) {
         break;
       }
       if (level + 2 < config::kNumLevels) {
         // Check that file does not overlap too many grandparent bytes.
         GetOverlappingInputs(level + 2, &start, &limit, &overlaps);
-        const int64_t sum = TotalFileSize(overlaps);
+        const int64_t sum = TotalFileSize(overlaps);//overlaps 保存冲突文件元信息
+        //进入if分支 表示level层和level+1层都没有没有冲突 但是level+2层有冲突
+        //如果冲突文件大小超过默认值20M则保存在level层中
         if (sum > MaxGrandParentOverlapBytes(vset_->options_)) {
           break;
         }
@@ -920,6 +923,9 @@ void VersionSet::AppendVersion(Version* v) {
 }
 
 /**
+ * 将VersionEdit写入到Manifest文件中
+ * @param edit 版本信息
+ * @param mu   锁
  * 注意: 进入此函数就已经加锁了
  */
 Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
@@ -943,7 +949,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
     builder.Apply(edit);//将VersionEdit保存到Builder中
     builder.SaveTo(v);//将Builder中数据保存到Version中
   }
-  Finalize(v);
+  Finalize(v);//打分算法
 
   // Initialize new descriptor log file if necessary by creating
   // a temporary file that contains a snapshot of the current version.
@@ -1189,6 +1195,7 @@ void VersionSet::MarkFileNumberUsed(uint64_t number) {
 }
 /**
  * 预计算下次压缩Level层次
+ * @param v 新版本信息
  */
 void VersionSet::Finalize(Version* v) {
   // Precomputed best level for next compaction
@@ -1211,6 +1218,7 @@ void VersionSet::Finalize(Version* v) {
       // file size is small (perhaps because of a small write-buffer
       // setting, or very high compression ratios, or lots of
       // overwrites/deletions).
+      // 这里的size表示 level0中有多少文件
       score = v->files_[level].size() /
           static_cast<double>(config::kL0_CompactionTrigger);
     } else {
