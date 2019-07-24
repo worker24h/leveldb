@@ -49,7 +49,7 @@ struct LRUHandle {
 
   size_t charge;      // TODO(opt): Only allow uint32_t?
   size_t key_length;
-  bool in_cache;      // Whether entry is in the cache.
+  bool in_cache;      // Whether entry is in the cache. false表示回收内存
   uint32_t refs;      // References, including cache reference, if present.
   uint32_t hash;      // Hash of key(); used for fast sharding and comparisons
   char key_data[1];   // Beginning of key
@@ -117,7 +117,7 @@ class HandleTable {
   // matches key/hash.  If there is no such cache entry, return a
   // pointer to the trailing slot in the corresponding linked list.
   LRUHandle** FindPointer(const Slice& key, uint32_t hash) {
-    LRUHandle** ptr = &list_[hash & (length_ - 1)];// 
+    LRUHandle** ptr = &list_[hash & (length_ - 1)];//哈希链表
     while (*ptr != NULL &&
            ((*ptr)->hash != hash || key != (*ptr)->key())) {
       ptr = &(*ptr)->next_hash;
@@ -183,20 +183,22 @@ class LRUCache {
   bool FinishErase(LRUHandle* e);
 
   // Initialized before use. 默认值是62
-  size_t capacity_;
+  size_t capacity_; //容量 超过这个容量后就要移除旧数据
 
   // mutex_ protects the following state.
   mutable port::Mutex mutex_;
-  size_t usage_;
+  size_t usage_; //当前cache使用量
 
   // Dummy head of LRU list.
   // lru.prev is newest entry, lru.next is oldest entry.
   // Entries have refs==1 and in_cache==true.
-  // 在当前链表中元素 引用计数器 一定是1 
+  // 稳定状态下 所有元素都存在这个链表中 这个链表中元素refs一定等于1
   LRUHandle lru_;
 
   // Dummy head of in-use list.
   // Entries are in use by clients, and have refs >= 2 and in_cache==true.
+  // 当用户查询某条记录时 会将元素从lru_移动到这个链表中  这个链表中元素refs一定大于等于2  当使用完毕后
+  // refs自减 然后将元素移回到lru_中
   LRUHandle in_use_;
 
   HandleTable table_; /* 元素始终存在hashtable 只有从LRUCache删除时才会吧hashtable中元素删除 */
@@ -216,30 +218,40 @@ LRUCache::~LRUCache() {
   for (LRUHandle* e = lru_.next; e != &lru_; ) {
     LRUHandle* next = e->next;
     assert(e->in_cache);
-    e->in_cache = false;
+    e->in_cache = false; //表示要回收内存
     assert(e->refs == 1);  // Invariant of lru_ list.
     Unref(e);
     e = next;
   }
 }
 
+/**
+ * 将引用计数加1
+ * @param e
+ */
 void LRUCache::Ref(LRUHandle* e) {
-  if (e->refs == 1 && e->in_cache) {  // If on lru_ list, move to in_use_ list.
+  if (e->refs == 1 && e->in_cache) {// 进入这个分支表示e一定在lru_链表中 If on lru_ list, move to in_use_ list.
     LRU_Remove(e);
     LRU_Append(&in_use_, e);
   }
   e->refs++;
 }
 
+/**
+ * 释放引用计数
+ * @param e 元素
+ * @说明：
+ *   要么直接回收内存 要么将元素e从in_use_链表移动到lru_链表
+ */
 void LRUCache::Unref(LRUHandle* e) {
   assert(e->refs > 0);
   e->refs--;
-  if (e->refs == 0) { // Deallocate. 表示没有引用 支持回收内容
+  if (e->refs == 0) { // Deallocate. in_cache一定是false 表示没有引用 直接释放内存
     assert(!e->in_cache);
-    (*e->deleter)(e->key(), e->value);
+    (*e->deleter)(e->key(), e->value);//这里调用的是DeleteEntry
     free(e);
-  } else if (e->in_cache && e->refs == 1) {  // No longer in use; move to lru_ list.
-    LRU_Remove(e);
+  } else if (e->in_cache && e->refs == 1) {//可参考FindTabe函数 会进入这个分支 No longer in use; move to lru_ list.
+    LRU_Remove(e);//从in_use_链表中删除
     LRU_Append(&lru_, e);//插入LRU链表中
   }
 }
@@ -250,7 +262,9 @@ void LRUCache::LRU_Remove(LRUHandle* e) {
 }
 
 /**
- * 插入到最后
+ * 插入到链尾
+ * @param list 链表头结点
+ * @param e 新元素
  */
 void LRUCache::LRU_Append(LRUHandle* list, LRUHandle* e) {
   // Make "e" newest entry by inserting just before *list
@@ -292,12 +306,12 @@ Cache::Handle* LRUCache::Insert(
     const Slice& key, uint32_t hash, void* value, size_t charge,
     void (*deleter)(const Slice& key, void* value)) {
   MutexLock l(&mutex_);
-
+  //将数据保存在LRUHandle中
   LRUHandle* e = reinterpret_cast<LRUHandle*>(
       malloc(sizeof(LRUHandle)-1 + key.size()));
   e->value = value;
   e->deleter = deleter;
-  e->charge = charge;
+  e->charge = charge;//占用cache容量 目前始终为1
   e->key_length = key.size();
   e->hash = hash;
   e->in_cache = false;
@@ -305,18 +319,18 @@ Cache::Handle* LRUCache::Insert(
   memcpy(e->key_data, key.data(), key.size());
 
   if (capacity_ > 0) {
-    e->refs++;  // for the cache's reference.
+    e->refs++;  // for the cache's reference. 注意这里refs已经变成2
     e->in_cache = true;
     LRU_Append(&in_use_, e);//插入链表
-    usage_ += charge;
+    usage_ += charge; //统计使用量
     FinishErase(table_.Insert(e));//插入hashtable中
   } // else don't cache.  (Tests use capacity_==0 to turn off caching.)
 
-  /* 需要将LRU链表中节点删除 */
+  /* 删除LRU链表中节点 直到条件不满足 */
   while (usage_ > capacity_ && lru_.next != &lru_) {
     LRUHandle* old = lru_.next;
     assert(old->refs == 1);
-    bool erased = FinishErase(table_.Remove(old->key(), old->hash));
+    bool erased = FinishErase(table_.Remove(old->key(), old->hash));//先从hashtable中删除
     if (!erased) {  // to avoid unused variable when compiled NDEBUG
       assert(erased);
     }
@@ -328,11 +342,11 @@ Cache::Handle* LRUCache::Insert(
 // If e != NULL, finish removing *e from the cache; it has already been removed
 // from the hash table.  Return whether e != NULL.  Requires mutex_ held.
 bool LRUCache::FinishErase(LRUHandle* e) {
-  if (e != NULL) {
+  if (e != NULL) {//进入这个分支后元素e一定会释放内存
     assert(e->in_cache);
-    LRU_Remove(e);
+    LRU_Remove(e);//从in_use_链表中删除
     e->in_cache = false;
-    usage_ -= e->charge;
+    usage_ -= e->charge; //减小使用计数
     Unref(e);
   }
   return e != NULL;
@@ -340,14 +354,17 @@ bool LRUCache::FinishErase(LRUHandle* e) {
 
 void LRUCache::Erase(const Slice& key, uint32_t hash) {
   MutexLock l(&mutex_);
-  FinishErase(table_.Remove(key, hash));
+  FinishErase(table_.Remove(key, hash));//从hashtable中删除
 }
 
+/**
+ * 清空LRU链表
+ */
 void LRUCache::Prune() {
   MutexLock l(&mutex_);
   while (lru_.next != &lru_) {
     LRUHandle* e = lru_.next;
-    assert(e->refs == 1);
+    assert(e->refs == 1);//引用计数一定是1
     bool erased = FinishErase(table_.Remove(e->key(), e->hash));
     if (!erased) {  // to avoid unused variable when compiled NDEBUG
       assert(erased);
@@ -379,16 +396,16 @@ class ShardedLRUCache : public Cache {
  public:
   explicit ShardedLRUCache(size_t capacity)
       : last_id_(0) {
-    const size_t per_shard = (capacity + (kNumShards - 1)) / kNumShards;//平均分配 每个cache负责16个
+    const size_t per_shard = (capacity + (kNumShards - 1)) / kNumShards;//每个分片最多缓存的个数
     for (int s = 0; s < kNumShards; s++) {
-      shard_[s].SetCapacity(per_shard);
+      shard_[s].SetCapacity(per_shard);//每个分片cache的容量为per_shard,超过这个就需要移除旧元素
     }
   }
   virtual ~ShardedLRUCache() { }
   
   virtual Handle* Insert(const Slice& key, void* value, size_t charge,
                          void (*deleter)(const Slice& key, void* value)) {
-    const uint32_t hash = HashSlice(key);
+    const uint32_t hash = HashSlice(key);//对key进行hash 然后插入到对应的cache中
     return shard_[Shard(hash)].Insert(key, hash, value, charge, deleter);
   }
   
@@ -421,7 +438,10 @@ class ShardedLRUCache : public Cache {
       shard_[s].Prune();
     }
   }
-  
+  /**
+   * 当前cache使用的总量
+   * @return 总量
+   */
   virtual size_t TotalCharge() const {
     size_t total = 0;
     for (int s = 0; s < kNumShards; s++) {

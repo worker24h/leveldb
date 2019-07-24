@@ -372,6 +372,7 @@ Status Version::Get(const ReadOptions& options,
   // We can search level-by-level since entries never hop across
   // levels.  Therefore we are guaranteed that if we find data
   // in an smaller level, later levels are irrelevant.
+  // 这个循环 是确定文件范围
   std::vector<FileMetaData*> tmp;
   FileMetaData* tmp2;
   for (int level = 0; level < config::kNumLevels; level++) {// 循环遍历每一层文件
@@ -384,7 +385,7 @@ Status Version::Get(const ReadOptions& options,
       // Level-0 files may overlap each other.  Find all files that
       // overlap user_key and process them in order from newest to oldest.
       tmp.reserve(num_files);
-      for (uint32_t i = 0; i < num_files; i++) {
+      for (uint32_t i = 0; i < num_files; i++) {//循环遍历 当前层次中每个文件
         FileMetaData* f = files[i];
         if (ucmp->Compare(user_key, f->smallest.user_key()) >= 0 &&
             ucmp->Compare(user_key, f->largest.user_key()) <= 0) {
@@ -396,7 +397,7 @@ Status Version::Get(const ReadOptions& options,
       std::sort(tmp.begin(), tmp.end(), NewestFirst);
       files = &tmp[0];
       num_files = tmp.size();
-    } else {
+    } else {//非level0文件
       // Binary search to find earliest index whose largest key >= ikey.
       uint32_t index = FindFile(vset_->icmp_, files_[level], ikey);
       if (index >= num_files) {//表示没有找到
@@ -416,10 +417,13 @@ Status Version::Get(const ReadOptions& options,
       }
     }
 
+    //到这里说明：我们要查找的文件范围已经确定了  具体有没有我们需要的key则需要进一步查询
     //num_files已经重新赋值 当num_files不为0 只能说明待查找key可能存在文件中 需要进一步对比
     for (uint32_t i = 0; i < num_files; ++i) {
       if (last_file_read != NULL && stats->seek_file == NULL) {
         // We have had more than one seek for this read.  Charge the 1st file.
+        // 该分支如果进入了 只会进入一次  表示第一个文件不存在我们要查找的key  相当于没有命中 那么我们
+        // 就要将其记录下来 并且在UpdateStats函数中对器allow_seek进行减一操作
         stats->seek_file = last_file_read;
         stats->seek_file_level = last_file_read_level;
       }
@@ -430,9 +434,9 @@ Status Version::Get(const ReadOptions& options,
 
       Saver saver;
       saver.state = kNotFound;
-      saver.ucmp = ucmp;
+      saver.ucmp = ucmp; //比较器
       saver.user_key = user_key;
-      saver.value = value;
+      saver.value = value; //输出参数 保存value返回给用户
       //构建 table cache 基于局部性原理+LRU算法
       s = vset_->table_cache_->Get(options, f->number, f->file_size,
                                    ikey, &saver, SaveValue);
@@ -460,7 +464,7 @@ Status Version::Get(const ReadOptions& options,
 bool Version::UpdateStats(const GetStats& stats) {
   FileMetaData* f = stats.seek_file;
   if (f != NULL) {
-    f->allowed_seeks--;
+    f->allowed_seeks--;// default value = 2^30
     if (f->allowed_seeks <= 0 && file_to_compact_ == NULL) {
       file_to_compact_ = f;
       file_to_compact_level_ = stats.seek_file_level;
@@ -590,7 +594,7 @@ void Version::GetOverlappingInputs(
     std::vector<FileMetaData*>* inputs) {
   assert(level >= 0);
   assert(level < config::kNumLevels);
-  inputs->clear();//清空
+  inputs->clear();//清空原有数据
 
   /* 获取用户key */
   Slice user_begin, user_end;
@@ -610,19 +614,21 @@ void Version::GetOverlappingInputs(
     const Slice file_limit = f->largest.user_key();
     if (begin != NULL && user_cmp->Compare(file_limit, user_begin) < 0) {
       // "f" is completely before specified range; skip it
+      // 文件f中的最大值比user_begin还要小  说明不用合并 跳过
     } else if (end != NULL && user_cmp->Compare(file_start, user_end) > 0) {
       // "f" is completely after specified range; skip it
+      // 文件f中的最小值比user_end还要大  说明不用合并 跳过
     } else {// 表示key值重叠
       inputs->push_back(f);
-      if (level == 0) {//对于level0文件 一定要找到最小、最大
+      if (level == 0) {//对于level0文件来说key不是有顺序的 一定要找到最小、最大
         // Level-0 files may overlap each other.  So check if the newly
         // added file has expanded the range.  If so, restart search.
         if (begin != NULL && user_cmp->Compare(file_start, user_begin) < 0) {
-          user_begin = file_start;
+          user_begin = file_start;//重新设置最小值
           inputs->clear();
           i = 0;
         } else if (end != NULL && user_cmp->Compare(file_limit, user_end) > 0) {
-          user_end = file_limit;
+          user_end = file_limit;//重新设置最大值
           inputs->clear();
           i = 0;
         }
@@ -1401,7 +1407,7 @@ void VersionSet::GetRange2(const std::vector<FileMetaData*>& inputs1,
                            InternalKey* smallest,
                            InternalKey* largest) {
   std::vector<FileMetaData*> all = inputs1;
-  all.insert(all.end(), inputs2.begin(), inputs2.end());
+  all.insert(all.end(), inputs2.begin(), inputs2.end());//集合合并
   GetRange(all, smallest, largest);
 }
 
@@ -1473,7 +1479,7 @@ Compaction* VersionSet::PickCompaction() {
       //compact_pointer_压缩点  保存上次压缩最大key值 本次largest key大于上次 则进行压缩
       if (compact_pointer_[level].empty() ||
           icmp_.Compare(f->largest.Encode(), compact_pointer_[level]) > 0) {
-        c->inputs_[0].push_back(f);//保存文件元数据信息
+        c->inputs_[0].push_back(f);//保存文件元数据信息 保存一个文件即可
         break;
       }
     }
@@ -1481,7 +1487,7 @@ Compaction* VersionSet::PickCompaction() {
       // Wrap-around to the beginning of the key space
       c->inputs_[0].push_back(current_->files_[level][0]); //保存文件元数据信息
     }
-  } else if (seek_compaction) {
+  } else if (seek_compaction) {//无效次数太多
     level = current_->file_to_compact_level_;//代表 当前要压缩合并的层次
     c = new Compaction(options_, level);
     c->inputs_[0].push_back(current_->file_to_compact_);
@@ -1500,10 +1506,11 @@ Compaction* VersionSet::PickCompaction() {
     // Note that the next call will discard the file we placed in
     // c->inputs_[0] earlier and replace it with an overlapping set
     // which will include the picked file.
+    // 遍历level-0层所有文件 重新确定输入集合input_[0]
     current_->GetOverlappingInputs(0, &smallest, &largest, &c->inputs_[0]);
     assert(!c->inputs_[0].empty());
   }
-  /* 以上设置的当前level文件 保存到inputs_[0] 下面这个函数是设置inputs_[1] */
+  /* 当前level要合并的文件统一保存到inputs_[0] 下面这个函数是设置inputs_[1] */
   SetupOtherInputs(c);
 
   return c;
@@ -1517,7 +1524,7 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
   const int level = c->level();
   InternalKey smallest, largest;
   GetRange(c->inputs_[0], &smallest, &largest);
-  //从level+1层中挑出 与 level层key重叠的 文件
+  //从level+1层中挑出 与 level层key重叠的 文件  inputs_[1]可能保存多个
   current_->GetOverlappingInputs(level+1, &smallest, &largest, &c->inputs_[1]);
 
   // Get entire range covered by compaction 
@@ -1528,15 +1535,15 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
   // See if we can grow the number of inputs in "level" without
   // changing the number of "level+1" files we pick up.
   if (!c->inputs_[1].empty()) {//如果进入此分支 表明level 和 level+1有key重复
-    // 以[all_start, all_limit]在level中挑出 扩展的文件信息
+    // 根据新的集合[all_start, all_limit]在level中进行过滤 可能又有符合条件的文件加入到其中
     std::vector<FileMetaData*> expanded0;
     current_->GetOverlappingInputs(level, &all_start, &all_limit, &expanded0);
     
     // 计算所有文件大小
-    const int64_t inputs0_size = TotalFileSize(c->inputs_[0]);
-    const int64_t inputs1_size = TotalFileSize(c->inputs_[1]);
+    const int64_t inputs0_size = TotalFileSize(c->inputs_[0]);// level层待合并的文件
+    const int64_t inputs1_size = TotalFileSize(c->inputs_[1]); // level + 1层待合并文件
     const int64_t expanded0_size = TotalFileSize(expanded0);
-
+    // expanded0集合 大于 input_[0]表示有新文件加入  因此需要以expanded0为基准
     if (expanded0.size() > c->inputs_[0].size() &&
         inputs1_size + expanded0_size <
             ExpandedCompactionByteSizeLimit(options_)) {
@@ -1545,7 +1552,7 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
       std::vector<FileMetaData*> expanded1;
       current_->GetOverlappingInputs(level+1, &new_start, &new_limit,
                                      &expanded1);//从level+1中挑出 重叠key的文件信息保存到扩展1中
-      if (expanded1.size() == c->inputs_[1].size()) {
+      if (expanded1.size() == c->inputs_[1].size()) {//表示level+1集合没有变化,则使用expanded0和expanded1作为input集合
         Log(options_->info_log,
             "Expanding@%d %d+%d (%ld+%ld bytes) to %d+%d (%ld+%ld bytes)\n",
             level,
@@ -1658,6 +1665,11 @@ void Compaction::AddInputDeletions(VersionEdit* edit) {
   }
 }
 
+/**
+ * 确定user_key是否被包含在高层次文件中
+ * @param user_key 用户输入key
+ * @return true 不含在高层文件中  false 包含在高层文件中
+ */
 bool Compaction::IsBaseLevelForKey(const Slice& user_key) {
   // Maybe use binary search to find right entry instead of linear search?
   const Comparator* user_cmp = input_version_->vset_->icmp_.user_comparator();

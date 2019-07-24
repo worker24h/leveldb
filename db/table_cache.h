@@ -45,13 +45,14 @@ class TableCache {
              void (*handle_result)(void*, const Slice&, const Slice&));
 
   // Evict any entry for the specified file number
+  // 根据文件编号 从cache中删除指定项
   void Evict(uint64_t file_number);
 
  private:
   Env* const env_;
   const std::string dbname_;
   const Options* options_;
-  Cache* cache_;
+  Cache* cache_; //封装LRUCache 在构造函数中初始化
 
   Status FindTable(uint64_t file_number, uint64_t file_size, Cache::Handle**);
 };

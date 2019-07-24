@@ -246,6 +246,10 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k,
     Slice handle_value = iiter->value();
     FilterBlockReader* filter = rep_->filter;
     BlockHandle handle;
+    /**
+     * 如果存在过滤模块 则先在过滤模块中通过布隆过滤器进行确定 如果布隆过滤器不存在 那么文件中一定不存在
+     * if 返回true表示不存在,if返回false表示可能存在 需要再次进行文件中查找即进入else中
+     */
     if (filter != NULL &&
         handle.DecodeFrom(&handle_value).ok() &&
         !filter->KeyMayMatch(handle.offset(), k)) {

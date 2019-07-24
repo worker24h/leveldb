@@ -87,6 +87,7 @@ static void ClipToRange(T* ptr, V minvalue, V maxvalue) {
   if (static_cast<V>(*ptr) > maxvalue) *ptr = maxvalue;
   if (static_cast<V>(*ptr) < minvalue) *ptr = minvalue;
 }
+
 Options SanitizeOptions(const std::string& dbname,
                         const InternalKeyComparator* icmp,
                         const InternalFilterPolicy* ipolicy,
@@ -749,7 +750,7 @@ void DBImpl::BackgroundCall() {
  */
 void DBImpl::BackgroundCompaction() {
   mutex_.AssertHeld();
-  //压缩MemTable
+  //压缩Immutable MemTable 不是空 说明存在则进行dump到文件中
   if (imm_ != NULL) {
     CompactMemTable();
     return;
@@ -950,7 +951,7 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
 
 /**
  * 执行压缩
- * @param compact 
+ * @param compact 压缩信息
  */
 Status DBImpl::DoCompactionWork(CompactionState* compact) {
   const uint64_t start_micros = env_->NowMicros();
@@ -997,7 +998,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       imm_micros += (env_->NowMicros() - imm_start);
     }
 
-    Slice key = input->key();
+    Slice key = input->key();//InternalKey
     if (compact->compaction->ShouldStopBefore(key) &&
         compact->builder != NULL) {
       status = FinishCompactionOutputFile(compact, input);
@@ -1008,12 +1009,12 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
     // Handle key/value, add to state, etc.
     bool drop = false;//代表记录是否要被删除 true 要从数据库中删除
-    if (!ParseInternalKey(key, &ikey)) {//解析key
+    if (!ParseInternalKey(key, &ikey)) {//解析key 失败
       // Do not hide error keys
       current_user_key.clear();
       has_current_user_key = false;
       last_sequence_for_key = kMaxSequenceNumber;
-    } else {
+    } else {//解析key 成功
       /**
        * 经过排序之后 相同的user key被放到迭代器 组织到一起了(相同user key放到一起)
        * current_user_key 保存上次user key
@@ -1035,6 +1036,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       } else if (ikey.type == kTypeDeletion &&
                  ikey.sequence <= compact->smallest_snapshot &&
                  compact->compaction->IsBaseLevelForKey(ikey.user_key)) {
+        // IsBaseLevelForKey函数返回true表示user_key不存在于高层中   false 表示存在于高层中
         // For this user key 对于当前user key来说:
         // (1) there is no data in higher levels 它不存在高层ldb文件中
         // (2) data in lower levels will have larger sequence numbers
@@ -1058,7 +1060,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
         (int)last_sequence_for_key, (int)compact->smallest_snapshot);
 #endif
 
-    if (!drop) {//不是删除 因此写入文件
+    if (!drop) {//不是删除操作 写入文件
       // Open output file if necessary
       if (compact->builder == NULL) {
         status = OpenCompactionOutputFile(compact);
@@ -1231,7 +1233,7 @@ Status DBImpl::Get(const ReadOptions& options,
   }
   //是否需要启动压缩流程
   if (have_stat_update && current->UpdateStats(stats)) {
-    MaybeScheduleCompaction();
+    MaybeScheduleCompaction();//表示由于某个文件seek次数过多需要合并
   }
   mem->Unref();
   if (imm != NULL) imm->Unref();

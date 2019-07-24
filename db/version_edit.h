@@ -109,7 +109,7 @@ class VersionEdit {
   bool has_next_file_number_;
   bool has_last_sequence_;
 
-  std::vector< std::pair<int, InternalKey> > compact_pointers_;
+  std::vector< std::pair<int, InternalKey> > compact_pointers_; //压缩点 压缩层次+最大key值
   DeletedFileSet deleted_files_; //DeletedFileSet重定义了
   std::vector< std::pair<int, FileMetaData> > new_files_; //std::pair中int代表level层次
 };

@@ -13,7 +13,7 @@ namespace leveldb {
 
 // Generate new filter every 2KB of data
 static const size_t kFilterBaseLg = 11;
-static const size_t kFilterBase = 1 << kFilterBaseLg;
+static const size_t kFilterBase = 1 << kFilterBaseLg; //2048 = 2k
 
 FilterBlockBuilder::FilterBlockBuilder(const FilterPolicy* policy)
     : policy_(policy) {
@@ -27,18 +27,23 @@ void FilterBlockBuilder::StartBlock(uint64_t block_offset) {
   }
 }
 
+/**
+ * 将key添加到FilterBlock中
+ * @param key InternalKey 不包含value
+ */
 void FilterBlockBuilder::AddKey(const Slice& key) {
   Slice k = key;
-  start_.push_back(keys_.size());
-  keys_.append(k.data(), k.size());
+  start_.push_back(keys_.size());//记录每个key的偏移位置
+  keys_.append(k.data(), k.size());//将key追加到字符串keys_末尾
 }
 
 Slice FilterBlockBuilder::Finish() {
   if (!start_.empty()) {
-    GenerateFilter();
+    GenerateFilter();//生成过滤器数据
   }
 
   // Append array of per-filter offsets
+  // 经过上面GenerateFilter操作后result_保存操作结果
   const uint32_t array_offset = result_.size();
   for (size_t i = 0; i < filter_offsets_.size(); i++) {
     PutFixed32(&result_, filter_offsets_[i]);
@@ -99,7 +104,7 @@ bool FilterBlockReader::KeyMayMatch(uint64_t block_offset, const Slice& key) {
     uint32_t limit = DecodeFixed32(offset_ + index*4 + 4);
     if (start <= limit && limit <= static_cast<size_t>(offset_ - data_)) {
       Slice filter = Slice(data_ + start, limit - start);
-      return policy_->KeyMayMatch(key, filter);
+      return policy_->KeyMayMatch(key, filter);//InternalFilterPolicy::KeyMayMatch
     } else if (start == limit) {
       // Empty filters do not match any keys
       return false;

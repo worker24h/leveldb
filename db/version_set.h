@@ -215,7 +215,7 @@ class VersionSet {
   // Return the combined file size of all files at the specified level.
   int64_t NumLevelBytes(int level) const;
 
-  // Return the last sequence number.
+  // Return the last sequence number. 每条记录都会有一个序号
   uint64_t LastSequence() const { return last_sequence_; }
 
   // Set the last sequence number to s.
@@ -396,6 +396,7 @@ class Compaction {
 
   // State used to check for number of of overlapping grandparent files
   // (parent == level_ + 1, grandparent == level_ + 2)
+  // level 要压缩合并的层次
   std::vector<FileMetaData*> grandparents_;
   size_t grandparent_index_;  // Index in grandparent_starts_
   bool seen_key_;             // Some output key has been seen

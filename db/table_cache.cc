@@ -35,7 +35,7 @@ TableCache::TableCache(const std::string& dbname,
     : env_(options->env),
       dbname_(dbname),
       options_(options),
-      cache_(NewLRUCache(entries)) {//LRUCache算法 默认990
+      cache_(NewLRUCache(entries)) {//LRUCache算法 cache容量默认值990
 }
 
 TableCache::~TableCache() {
@@ -54,7 +54,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
   char buf[sizeof(file_number)];
   EncodeFixed64(buf, file_number);
   Slice key(buf, sizeof(buf));
-  *handle = cache_->Lookup(key);
+  *handle = cache_->Lookup(key);//按照key进行查找 如果没有找到则说明是新文件
   if (*handle == NULL) {
     std::string fname = TableFileName(dbname_, file_number);//读取ldb文件
     RandomAccessFile* file = NULL;
@@ -76,7 +76,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
       // We do not cache error results so that if the error is transient,
       // or somebody repairs the file, we recover automatically.
     } else {
-      TableAndFile* tf = new TableAndFile;
+      TableAndFile* tf = new TableAndFile;//对文件对象和Table对象进行包装
       tf->file = file;
       tf->table = table;//保存table对象
       
@@ -129,7 +129,7 @@ Status TableCache::Get(const ReadOptions& options,
   if (s.ok()) {
     Table* t = reinterpret_cast<TableAndFile*>(cache_->Value(handle))->table;
     s = t->InternalGet(options, k, arg, saver);// 在table中查找k 如果找到则通过saver回调函数进行保存
-    cache_->Release(handle);
+    cache_->Release(handle);//必须调用 因此在FindTable的时候对Ref加1了 所以要主动释放
   }
   return s;
 }

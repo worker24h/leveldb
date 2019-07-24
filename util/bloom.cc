@@ -17,7 +17,7 @@ static uint32_t BloomHash(const Slice& key) {
 class BloomFilterPolicy : public FilterPolicy {
  private:
   size_t bits_per_key_;
-  size_t k_; /* 一个key值要经过k_次hash运算 */
+  size_t k_; /* 表示需要k_个hash函数 最大30个*/
 
  public:
   explicit BloomFilterPolicy(int bits_per_key)
@@ -39,13 +39,13 @@ class BloomFilterPolicy : public FilterPolicy {
    */
   virtual void CreateFilter(const Slice* keys, int n, std::string* dst) const {
     // Compute bloom filter size (in both bits and bytes)
-    size_t bits = n * bits_per_key_;
+    size_t bits = n * bits_per_key_; //表示bit数组中包含多少位
 
     // For small n, we can see a very high false positive rate.  Fix it
     // by enforcing a minimum bloom filter length.
-    if (bits < 64) bits = 64;
+    if (bits < 64) bits = 64;//避免误报率过高
 
-    size_t bytes = (bits + 7) / 8;
+    size_t bytes = (bits + 7) / 8;//8bit对齐
     bits = bytes * 8;
 
     const size_t init_size = dst->size();
@@ -55,10 +55,12 @@ class BloomFilterPolicy : public FilterPolicy {
     for (int i = 0; i < n; i++) {
       // Use double-hashing to generate a sequence of hash values.
       // See analysis in [Kirsch,Mitzenmacher 2006].
+      // 对一个key进行两次hash
       uint32_t h = BloomHash(keys[i]);
       const uint32_t delta = (h >> 17) | (h << 15);  // Rotate right 17 bits
+      //对于一个hash值（这里的hash可能很大数字）,通过for循环模拟k个hash场景
       for (size_t j = 0; j < k_; j++) {
-        const uint32_t bitpos = h % bits;
+        const uint32_t bitpos = h % bits;//对bit数组求余 获取存储的bit
         array[bitpos/8] |= (1 << (bitpos % 8));
         h += delta;
       }
